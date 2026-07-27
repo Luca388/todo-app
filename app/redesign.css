@@ -373,7 +373,7 @@ button {
 
 .task-composer {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) minmax(128px, auto) auto;
   align-items: center;
   gap: 10px;
   min-height: 58px;
@@ -402,6 +402,21 @@ button {
 
 .task-composer input::placeholder {
   color: #9aa29f;
+}
+
+.composer-date {
+  display: flex;
+  align-items: center;
+}
+
+.task-composer .composer-date input {
+  width: 132px;
+  height: 34px;
+  border-radius: 9px;
+  padding: 0 7px;
+  background: #f5f6f2;
+  color: var(--text-soft);
+  font-size: 10px;
 }
 
 .task-composer button {
@@ -596,6 +611,29 @@ button {
   white-space: nowrap;
 }
 
+.task-date {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  min-height: 20px;
+  border-radius: 999px;
+  padding: 0 7px;
+  background: #f0f1ec;
+  color: var(--text-soft);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.task-date.is-today {
+  background: #e9f2eb;
+  color: var(--forest);
+}
+
+.task-date.is-overdue {
+  background: #fff0ec;
+  color: #a33d30;
+}
+
 .task-item.is-complete .task-copy strong {
   text-decoration: line-through;
 }
@@ -668,7 +706,7 @@ button {
 .task-edit-form {
   display: grid;
   grid-column: 2 / -1;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(128px, auto) auto auto;
   gap: 6px;
 }
 
@@ -693,6 +731,16 @@ button {
 .task-edit-form button[type="submit"] {
   background: var(--forest);
   color: #fff;
+}
+
+.task-edit-date {
+  display: flex;
+}
+
+.task-edit-form .task-edit-date input {
+  width: 132px;
+  color: var(--text-soft);
+  font-size: 10px;
 }
 
 .focus-column {
@@ -1290,6 +1338,14 @@ button {
     padding-left: 12px;
   }
 
+  .task-composer > input {
+    grid-column: 1 / -1;
+  }
+
+  .task-composer .composer-date input {
+    width: 100%;
+  }
+
   .composer-plus {
     display: none;
   }
@@ -1321,6 +1377,14 @@ button {
   .task-edit-form {
     grid-column: 2 / -1;
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .task-edit-form > input {
+    grid-column: 1 / -1;
+  }
+
+  .task-edit-form .task-edit-date input {
+    width: 100%;
   }
 
   .task-edit-form button:last-child {

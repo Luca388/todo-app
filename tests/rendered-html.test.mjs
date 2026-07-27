@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import {
+  dueAtFromDateInput,
+  getDueDateKey,
+  getTaskDateStatus,
+} from "../app/task-dates.ts";
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -37,6 +42,17 @@ test("server-renders the Haru app and authentication entry points", async () => 
   assert.match(html, /로그인 확인 중…/);
   assert.match(html, /할 일과 집중 타이머/);
   assert.match(html, /집중 타이머/);
+  assert.match(html, /기한 지남/);
+});
+
+test("stores and classifies task dates without timezone drift", () => {
+  const dueAt = dueAtFromDateInput("2026-07-27");
+
+  assert.equal(dueAt, "2026-07-27T12:00:00.000Z");
+  assert.equal(getDueDateKey(dueAt), "2026-07-27");
+  assert.equal(getTaskDateStatus(dueAt, "2026-07-27"), "today");
+  assert.equal(getTaskDateStatus(dueAt, "2026-07-28"), "overdue");
+  assert.equal(getTaskDateStatus(dueAt, "2026-07-26"), "upcoming");
 });
 
 test("wires the Supabase auth lifecycle to desktop and mobile controls", async () => {
@@ -63,7 +79,7 @@ test("wires the Supabase auth lifecycle to desktop and mobile controls", async (
 });
 
 test("wires authenticated todos to Supabase with visible request states", async () => {
-  const [app, taskList] = await Promise.all([
+  const [app, taskList, taskDates] = await Promise.all([
     readFile(
       new URL("../app/components/TodoTimerApp.tsx", import.meta.url),
       "utf8",
@@ -72,12 +88,15 @@ test("wires authenticated todos to Supabase with visible request states", async 
       new URL("../app/components/TaskList.tsx", import.meta.url),
       "utf8",
     ),
+    readFile(new URL("../app/task-dates.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(app, /listTodos\(\)/);
   assert.match(app, /await createTodo\(/);
   assert.match(app, /await setTodoCompleted\(/);
   assert.match(app, /await updateTodo\(/);
+  assert.match(app, /due_at: nextDueAt/);
+  assert.match(app, /dueAtFromDateInput/);
   assert.match(app, /await deleteTodo\(/);
   assert.match(app, /nextTodos\.map\(todoRowToTask\)/);
   assert.match(app, /await createTodos\(/);
@@ -88,12 +107,19 @@ test("wires authenticated todos to Supabase with visible request states", async 
   assert.match(taskList, /다시 시도/);
   assert.match(taskList, /setFilter\("active"\)/);
   assert.match(taskList, /setFilter\("completed"\)/);
+  assert.match(taskList, /setFilter\("today"\)/);
+  assert.match(taskList, /setFilter\("upcoming"\)/);
+  assert.match(taskList, /setFilter\("overdue"\)/);
+  assert.match(taskList, /type="date"/);
+  assert.match(taskList, /task\.dueAt/);
   assert.match(taskList, /Number\(left\.completed\) - Number\(right\.completed\)/);
   assert.match(taskList, /task\.completed \|\|/);
   assert.match(taskList, /할 일 제목 수정/);
   assert.match(taskList, /이 작업은 되돌릴 수 없습니다/);
   assert.doesNotMatch(taskList, /\{task\.label\}/);
   assert.doesNotMatch(taskList, /포모도로/);
+  assert.match(taskDates, /T12:00:00\.000Z/);
+  assert.match(taskDates, /getTaskDateStatus/);
 });
 
 test("persists and restores the Pomodoro session lifecycle", async () => {

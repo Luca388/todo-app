@@ -35,6 +35,10 @@ import {
   type TodoRow,
 } from "../../lib/supabase";
 import { defaultTimerDurations, initialTasks } from "../data";
+import {
+  dueAtFromDateInput,
+  getDueDateKey,
+} from "../task-dates";
 import type { Task, TaskLabel, TimerMode } from "../types";
 import { FocusTimer } from "./FocusTimer";
 import { Sidebar } from "./Sidebar";
@@ -121,6 +125,9 @@ function isTask(value: unknown): value is Task {
   return (
     typeof task.id === "string" &&
     typeof task.title === "string" &&
+    (task.dueAt === undefined ||
+      task.dueAt === null ||
+      typeof task.dueAt === "string") &&
     (task.label === "업무" ||
       task.label === "개인" ||
       task.label === "건강") &&
@@ -147,7 +154,10 @@ function readGuestData() {
       sessions?: unknown;
     };
     const tasks = Array.isArray(parsed.tasks)
-      ? parsed.tasks.filter(isTask)
+      ? parsed.tasks.filter(isTask).map((task) => ({
+          ...task,
+          dueAt: typeof task.dueAt === "string" ? task.dueAt : null,
+        }))
       : initialTasks;
     const sessions = Array.isArray(parsed.sessions)
       ? parsed.sessions.filter((value): value is GuestCompletedSession => {
@@ -291,6 +301,7 @@ function todoRowToTask(todo: TodoRow): Task {
   return {
     id: todo.id,
     title: todo.title,
+    dueAt: todo.due_at,
     label: taskLabels[todo.label],
     estimate: todo.estimated_pomodoros,
     completed: todo.completed,
@@ -340,6 +351,7 @@ export function TodoTimerApp() {
   const [remoteTodos, setRemoteTodos] = useState<RemoteTodosState | null>(null);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [newTask, setNewTask] = useState("");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [mode, setMode] = useState<TimerMode>("focus");
   const [timerDurations, setTimerDurations] = useState<TimerDurations>({
     ...defaultTimerDurations,
@@ -961,6 +973,7 @@ export function TodoTimerApp() {
               todo.title.trim(),
               todo.label,
               todo.completed,
+              todo.due_at,
               todo.estimated_pomodoros,
             ].join("\u0000");
             const ids = availableTodos.get(key) ?? [];
@@ -975,6 +988,7 @@ export function TodoTimerApp() {
               task.title.trim(),
               label,
               task.completed,
+              task.dueAt,
               task.estimate,
             ].join("\u0000");
             const matchingIds = availableTodos.get(key);
@@ -993,6 +1007,7 @@ export function TodoTimerApp() {
                 title: task.title,
                 label,
                 completed: task.completed,
+                dueAt: task.dueAt,
                 position: todos.length + index,
                 estimatedPomodoros: task.estimate,
               },
@@ -1435,6 +1450,7 @@ export function TodoTimerApp() {
         {
           id: window.crypto.randomUUID(),
           title,
+          dueAt: dueAtFromDateInput(newTaskDueDate),
           label: "개인",
           estimate: 1,
           completed: false,
@@ -1442,6 +1458,7 @@ export function TodoTimerApp() {
         },
       ]);
       setNewTask("");
+      setNewTaskDueDate("");
       return;
     }
 
@@ -1451,12 +1468,14 @@ export function TodoTimerApp() {
     try {
       const created = await createTodo({
         title,
+        dueAt: dueAtFromDateInput(newTaskDueDate),
         position: tasks.length,
       });
       const createdTask = todoRowToTask(created);
       updateVisibleTasks((current) => [...current, createdTask]);
       setActiveTaskId((current) => current ?? createdTask.id);
       setNewTask("");
+      setNewTaskDueDate("");
     } catch (error) {
       setTodoActionError(getAuthErrorMessage(error));
     } finally {
@@ -1464,17 +1483,27 @@ export function TodoTimerApp() {
     }
   }
 
-  async function handleRenameTask(id: string, title: string) {
+  async function handleUpdateTask(
+    id: string,
+    title: string,
+    dueDate: string,
+  ) {
     const nextTitle = title.trim();
+    const nextDueAt = dueAtFromDateInput(dueDate);
     const task = tasks.find((candidate) => candidate.id === id);
     if (!nextTitle || !task || pendingTodoIds.has(id)) return false;
-    if (task.title === nextTitle) return true;
+    if (
+      task.title === nextTitle &&
+      (getDueDateKey(task.dueAt) ?? "") === dueDate
+    ) {
+      return true;
+    }
 
     if (!authUserId) {
       setGuestTasks((current) =>
         current.map((candidate) =>
           candidate.id === id
-            ? { ...candidate, title: nextTitle }
+            ? { ...candidate, title: nextTitle, dueAt: nextDueAt }
             : candidate,
         ),
       );
@@ -1485,11 +1514,18 @@ export function TodoTimerApp() {
     setPendingTodoIds((current) => new Set(current).add(id));
 
     try {
-      const updated = await updateTodo(id, { title: nextTitle });
+      const updated = await updateTodo(id, {
+        title: nextTitle,
+        due_at: nextDueAt,
+      });
       updateVisibleTasks((current) =>
         current.map((candidate) =>
           candidate.id === id
-            ? { ...candidate, title: updated.title }
+            ? {
+                ...candidate,
+                title: updated.title,
+                dueAt: updated.due_at,
+              }
             : candidate,
         ),
       );
@@ -1958,10 +1994,12 @@ export function TodoTimerApp() {
             isSaving={todoSaving}
             pendingTaskIds={pendingTodoIds}
             newTask={newTask}
+            newTaskDueDate={newTaskDueDate}
             onNewTaskChange={setNewTask}
+            onNewTaskDueDateChange={setNewTaskDueDate}
             onAddTask={handleAddTask}
             onDeleteTask={handleDeleteTask}
-            onRenameTask={handleRenameTask}
+            onUpdateTask={handleUpdateTask}
             onRetry={handleRetryTodos}
             onToggleTask={handleToggleTask}
             onSelectTask={handleSelectTask}

@@ -1,7 +1,21 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import {
+  formatDateKey,
+  getDueDateKey,
+  getLocalDateKey,
+  getTaskDateStatus,
+} from "../task-dates";
 import type { Task } from "../types";
+
+type TaskFilter =
+  | "all"
+  | "today"
+  | "upcoming"
+  | "overdue"
+  | "active"
+  | "completed";
 
 type TaskListProps = {
   tasks: Task[];
@@ -12,10 +26,16 @@ type TaskListProps = {
   isSaving: boolean;
   pendingTaskIds: ReadonlySet<string>;
   newTask: string;
+  newTaskDueDate: string;
   onNewTaskChange: (value: string) => void;
+  onNewTaskDueDateChange: (value: string) => void;
   onAddTask: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
   onDeleteTask: (id: string) => Promise<boolean>;
-  onRenameTask: (id: string, title: string) => Promise<boolean>;
+  onUpdateTask: (
+    id: string,
+    title: string,
+    dueDate: string,
+  ) => Promise<boolean>;
   onRetry: () => void;
   onToggleTask: (id: string) => void;
   onSelectTask: (id: string) => void;
@@ -30,40 +50,75 @@ export function TaskList({
   isSaving,
   pendingTaskIds,
   newTask,
+  newTaskDueDate,
   onNewTaskChange,
+  onNewTaskDueDateChange,
   onAddTask,
   onDeleteTask,
-  onRenameTask,
+  onUpdateTask,
   onRetry,
   onToggleTask,
   onSelectTask,
 }: TaskListProps) {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
-  const [filter, setFilter] = useState<"all" | "active" | "completed">("all");
+  const [editingDueDate, setEditingDueDate] = useState("");
+  const [filter, setFilter] = useState<TaskFilter>("all");
+  const todayKey = getLocalDateKey();
   const remaining = tasks.filter((task) => !task.completed).length;
   const completed = tasks.length - remaining;
-  const orderedTasks =
-    filter === "all"
-      ? [...tasks].sort(
-          (left, right) => Number(left.completed) - Number(right.completed),
-        )
-      : tasks;
+  const today = tasks.filter(
+    (task) =>
+      !task.completed &&
+      getTaskDateStatus(task.dueAt, todayKey) === "today",
+  ).length;
+  const upcoming = tasks.filter(
+    (task) =>
+      !task.completed &&
+      getTaskDateStatus(task.dueAt, todayKey) === "upcoming",
+  ).length;
+  const overdue = tasks.filter(
+    (task) =>
+      !task.completed &&
+      getTaskDateStatus(task.dueAt, todayKey) === "overdue",
+  ).length;
+  const orderedTasks = [...tasks].sort(
+    (left, right) => Number(left.completed) - Number(right.completed),
+  );
   const visibleTasks = orderedTasks.filter((task) => {
     if (filter === "active") return !task.completed;
     if (filter === "completed") return task.completed;
+    if (filter === "today") {
+      return (
+        !task.completed &&
+        getTaskDateStatus(task.dueAt, todayKey) === "today"
+      );
+    }
+    if (filter === "upcoming") {
+      return (
+        !task.completed &&
+        getTaskDateStatus(task.dueAt, todayKey) === "upcoming"
+      );
+    }
+    if (filter === "overdue") {
+      return (
+        !task.completed &&
+        getTaskDateStatus(task.dueAt, todayKey) === "overdue"
+      );
+    }
     return true;
   });
 
-  async function handleRenameSubmit(
+  async function handleUpdateSubmit(
     event: FormEvent<HTMLFormElement>,
     id: string,
   ) {
     event.preventDefault();
-    const saved = await onRenameTask(id, editingTitle);
+    const saved = await onUpdateTask(id, editingTitle, editingDueDate);
     if (saved) {
       setEditingTaskId(null);
       setEditingTitle("");
+      setEditingDueDate("");
     }
   }
 
@@ -77,6 +132,7 @@ export function TaskList({
     if (deleted && editingTaskId === task.id) {
       setEditingTaskId(null);
       setEditingTitle("");
+      setEditingDueDate("");
     }
   }
 
@@ -104,6 +160,16 @@ export function TaskList({
           autoComplete="off"
           disabled={isLoading || isSaving}
         />
+        <label className="composer-date">
+          <span className="sr-only">할 일 날짜</span>
+          <input
+            aria-label="할 일 날짜"
+            type="date"
+            value={newTaskDueDate}
+            onChange={(event) => onNewTaskDueDateChange(event.target.value)}
+            disabled={isLoading || isSaving}
+          />
+        </label>
         <button type="submit" disabled={isLoading || isSaving}>
           {isSaving ? "저장 중…" : "추가"}
         </button>
@@ -117,6 +183,27 @@ export function TaskList({
             onClick={() => setFilter("all")}
           >
             전체 <span>{tasks.length}</span>
+          </button>
+          <button
+            className={filter === "today" ? "is-active" : ""}
+            type="button"
+            onClick={() => setFilter("today")}
+          >
+            오늘 <span>{today}</span>
+          </button>
+          <button
+            className={filter === "upcoming" ? "is-active" : ""}
+            type="button"
+            onClick={() => setFilter("upcoming")}
+          >
+            예정 <span>{upcoming}</span>
+          </button>
+          <button
+            className={filter === "overdue" ? "is-active" : ""}
+            type="button"
+            onClick={() => setFilter("overdue")}
+          >
+            기한 지남 <span>{overdue}</span>
           </button>
           <button
             className={filter === "active" ? "is-active" : ""}
@@ -168,6 +255,8 @@ export function TaskList({
           const isActive = activeTaskId === task.id;
           const isPending = pendingTaskIds.has(task.id);
           const isEditing = editingTaskId === task.id;
+          const dueDateKey = getDueDateKey(task.dueAt);
+          const dateStatus = getTaskDateStatus(task.dueAt, todayKey);
 
           return (
             <article
@@ -190,7 +279,7 @@ export function TaskList({
               {isEditing ? (
                 <form
                   className="task-edit-form"
-                  onSubmit={(event) => handleRenameSubmit(event, task.id)}
+                  onSubmit={(event) => handleUpdateSubmit(event, task.id)}
                 >
                   <label className="sr-only" htmlFor={`edit-task-${task.id}`}>
                     할 일 제목 수정
@@ -203,6 +292,18 @@ export function TaskList({
                     autoFocus
                     disabled={isPending}
                   />
+                  <label className="task-edit-date">
+                    <span className="sr-only">할 일 날짜 수정</span>
+                    <input
+                      aria-label="할 일 날짜 수정"
+                      type="date"
+                      value={editingDueDate}
+                      onChange={(event) =>
+                        setEditingDueDate(event.target.value)
+                      }
+                      disabled={isPending}
+                    />
+                  </label>
                   <button type="submit" disabled={isPending || !editingTitle.trim()}>
                     저장
                   </button>
@@ -211,6 +312,7 @@ export function TaskList({
                     onClick={() => {
                       setEditingTaskId(null);
                       setEditingTitle("");
+                      setEditingDueDate("");
                     }}
                     disabled={isPending}
                   >
@@ -230,6 +332,15 @@ export function TaskList({
                     }
                   >
                     <strong>{task.title}</strong>
+                    {dueDateKey && (
+                      <span className={`task-date is-${dateStatus}`}>
+                        {dateStatus === "today"
+                          ? "오늘"
+                          : dateStatus === "overdue" && !task.completed
+                            ? `기한 지남 · ${formatDateKey(dueDateKey)}`
+                            : formatDateKey(dueDateKey)}
+                      </span>
+                    )}
                   </button>
 
                   <div className="task-row-actions">
@@ -238,6 +349,7 @@ export function TaskList({
                       onClick={() => {
                         setEditingTaskId(task.id);
                         setEditingTitle(task.title);
+                        setEditingDueDate(dueDateKey ?? "");
                       }}
                       disabled={isPending}
                     >

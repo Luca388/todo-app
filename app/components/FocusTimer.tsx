@@ -1,4 +1,9 @@
-import type { CSSProperties } from "react";
+import {
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import type { Task, TimerMode } from "../types";
 
 type FocusTimerProps = {
@@ -12,6 +17,7 @@ type FocusTimerProps = {
   todayCompletedSessions: number;
   todayFocusSeconds: number;
   isRunning: boolean;
+  onDurationChange: (seconds: number) => void;
   onModeChange: (mode: TimerMode) => void;
   onRetry: () => void;
   onToggleRunning: () => void;
@@ -20,8 +26,7 @@ type FocusTimerProps = {
 
 const modeLabels: Record<TimerMode, string> = {
   focus: "집중",
-  short: "짧은 휴식",
-  long: "긴 휴식",
+  rest: "휴식",
 };
 
 function formatTime(value: number) {
@@ -51,15 +56,43 @@ export function FocusTimer({
   todayCompletedSessions,
   todayFocusSeconds,
   isRunning,
+  onDurationChange,
   onModeChange,
   onRetry,
   onToggleRunning,
   onReset,
 }: FocusTimerProps) {
+  const [isEditingDuration, setIsEditingDuration] = useState(false);
+  const [draftMinutes, setDraftMinutes] = useState("");
   const elapsedRatio = (totalSeconds - remainingSeconds) / totalSeconds;
+  const showDurationEditor =
+    isEditingDuration && !hasActiveSession && !isPending;
   const timerStyle = {
     "--timer-progress": `${Math.max(0.02, elapsedRatio) * 360}deg`,
   } as CSSProperties;
+
+  function openDurationEditor() {
+    if (hasActiveSession || isPending) return;
+    setDraftMinutes(String(Math.max(1, Math.round(totalSeconds / 60))));
+    setIsEditingDuration(true);
+  }
+
+  function saveDuration(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsedMinutes = Number.parseInt(draftMinutes, 10);
+    if (!Number.isFinite(parsedMinutes)) return;
+
+    const minutes = Math.min(Math.max(parsedMinutes, 1), 1440);
+    onDurationChange(minutes * 60);
+    setDraftMinutes(String(minutes));
+    setIsEditingDuration(false);
+  }
+
+  function handleDurationKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      setIsEditingDuration(false);
+    }
+  }
 
   return (
     <aside className="focus-column" aria-labelledby="focus-title">
@@ -76,7 +109,10 @@ export function FocusTimer({
               className={mode === key ? "is-active" : ""}
               type="button"
               key={key}
-              onClick={() => onModeChange(key)}
+              onClick={() => {
+                setIsEditingDuration(false);
+                onModeChange(key);
+              }}
               disabled={isRunning || hasActiveSession || isPending}
             >
               {modeLabels[key]}
@@ -87,7 +123,38 @@ export function FocusTimer({
         <div className="timer-ring" style={timerStyle}>
           <div className="timer-face">
             <span>{mode === "focus" ? "FOCUS" : "BREAK"}</span>
-            <strong>{formatTime(remainingSeconds)}</strong>
+            {showDurationEditor ? (
+              <form
+                className="timer-duration-editor"
+                onSubmit={saveDuration}
+              >
+                <label>
+                  <span className="sr-only">타이머 시간(분)</span>
+                  <input
+                    autoFocus
+                    inputMode="numeric"
+                    max={1440}
+                    min={1}
+                    onChange={(event) => setDraftMinutes(event.target.value)}
+                    onKeyDown={handleDurationKeyDown}
+                    type="number"
+                    value={draftMinutes}
+                  />
+                  <span>분</span>
+                </label>
+                <button type="submit">저장</button>
+              </form>
+            ) : (
+              <button
+                className="timer-time-button"
+                type="button"
+                onClick={openDurationEditor}
+                disabled={hasActiveSession || isPending}
+                aria-label={`${formatTime(remainingSeconds)}, 시간 변경`}
+              >
+                <strong>{formatTime(remainingSeconds)}</strong>
+              </button>
+            )}
             <small>
               {isPending
                 ? "기록을 저장하고 있어요"
@@ -95,7 +162,7 @@ export function FocusTimer({
                   ? "집중하고 있어요"
                   : hasActiveSession
                     ? "일시정지됨"
-                    : "준비되면 시작하세요"}
+                    : "시간을 누르면 변경할 수 있어요"}
             </small>
           </div>
         </div>
@@ -109,7 +176,10 @@ export function FocusTimer({
           <button
             className="reset-button"
             type="button"
-            onClick={onReset}
+            onClick={() => {
+              setIsEditingDuration(false);
+              onReset();
+            }}
             disabled={isPending}
             aria-label={hasActiveSession ? "실행 중인 세션 취소" : "타이머 초기화"}
           >
@@ -118,7 +188,10 @@ export function FocusTimer({
           <button
             className="start-button"
             type="button"
-            onClick={onToggleRunning}
+            onClick={() => {
+              setIsEditingDuration(false);
+              onToggleRunning();
+            }}
             disabled={
               isPending ||
               (!activeTask && mode === "focus" && !hasActiveSession)
@@ -165,10 +238,6 @@ export function FocusTimer({
           <strong>{todayCompletedSessions}회</strong>
         </div>
       </div>
-
-      <blockquote>
-        “작은 집중이 모여<br />큰 하루를 만들어요.”
-      </blockquote>
     </aside>
   );
 }

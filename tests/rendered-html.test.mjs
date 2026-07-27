@@ -32,7 +32,7 @@ test("server-renders the Haru app and authentication entry points", async () => 
   assert.match(html, /<html lang="ko">/);
   assert.match(html, /<title>하루 \| 투두와 포모도로<\/title>/);
   assert.match(html, /class="app-shell"/);
-  assert.match(html, /오늘도 한 걸음씩\./);
+  assert.match(html, /오늘 할 일/);
   assert.match(html, /게스트 모드/);
   assert.match(html, /Google 로그인/);
   assert.match(html, /로그인 확인 중…/);
@@ -77,7 +77,10 @@ test("wires authenticated todos to Supabase with visible request states", async 
   assert.match(app, /await setTodoCompleted\(/);
   assert.match(app, /await updateTodo\(/);
   assert.match(app, /await deleteTodo\(/);
-  assert.match(app, /todos\.map\(todoRowToTask\)/);
+  assert.match(app, /nextTodos\.map\(todoRowToTask\)/);
+  assert.match(app, /await createTodos\(/);
+  assert.match(app, /await importCompletedPomodoros\(/);
+  assert.match(app, /haru:guest-data:v1/);
   assert.match(taskList, /Supabase에서 할 일을 불러오고 있어요/);
   assert.match(taskList, /아직 할 일이 없어요/);
   assert.match(taskList, /다시 시도/);
@@ -121,6 +124,38 @@ test("persists and restores the Pomodoro session lifecycle", async () => {
   assert.match(timer, /일시정지됨/);
   assert.match(timer, /실행 중인 세션 취소/);
   assert.match(timer, /다시 시도/);
+  assert.match(timer, /timer-duration-editor/);
+  assert.match(timer, /onDurationChange/);
+  assert.match(timer, /rest: "휴식"/);
+  assert.doesNotMatch(timer, /짧은 휴식|긴 휴식/);
   assert.match(timer, /todayCompletedSessions/);
   assert.match(timer, /todayFocusSeconds/);
+});
+
+test("ships an installable offline PWA shell", async () => {
+  const [manifestSource, serviceWorker, layout, app] = await Promise.all([
+    readFile(
+      new URL("../public/manifest.webmanifest", import.meta.url),
+      "utf8",
+    ),
+    readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(
+      new URL("../app/components/TodoTimerApp.tsx", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  const manifest = JSON.parse(manifestSource);
+
+  assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.start_url, "/");
+  assert.deepEqual(
+    manifest.icons.map((icon) => icon.sizes),
+    ["192x192", "512x512"],
+  );
+  assert.match(serviceWorker, /haru-shell-v1/);
+  assert.match(serviceWorker, /request\.mode === "navigate"/);
+  assert.match(layout, /manifest: "\/manifest\.webmanifest"/);
+  assert.match(app, /beforeinstallprompt/);
+  assert.match(app, /serviceWorker\.register\("\/sw\.js"\)/);
 });

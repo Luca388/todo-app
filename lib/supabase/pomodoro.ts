@@ -15,6 +15,13 @@ export type StartPomodoroInput = {
   plannedSeconds: number;
 };
 
+export type ImportCompletedPomodoroInput = {
+  id: string;
+  todoId?: string | null;
+  elapsedSeconds: number;
+  endedAt: string;
+};
+
 const MAX_SESSION_SECONDS = 86400;
 
 function clampElapsedSeconds(elapsedSeconds: number) {
@@ -194,4 +201,46 @@ export async function listRecentPomodoros(
 
   if (error) throw error;
   return data;
+}
+
+export async function importCompletedPomodoros(
+  inputs: ImportCompletedPomodoroInput[],
+): Promise<void> {
+  if (inputs.length === 0) return;
+
+  const user = await requireCurrentUser();
+  const payload: PomodoroSessionInsert[] = inputs.map((input) => {
+    const elapsedSeconds = Math.max(
+      1,
+      clampElapsedSeconds(input.elapsedSeconds),
+    );
+    const endedAt = new Date(input.endedAt);
+    const safeEndedAt = Number.isNaN(endedAt.getTime())
+      ? new Date()
+      : endedAt;
+
+    return {
+      id: input.id,
+      user_id: user.id,
+      todo_id: input.todoId ?? null,
+      mode: "focus",
+      status: "completed",
+      planned_seconds: elapsedSeconds,
+      elapsed_seconds: elapsedSeconds,
+      started_at: new Date(
+        safeEndedAt.getTime() - elapsedSeconds * 1000,
+      ).toISOString(),
+      last_resumed_at: null,
+      ended_at: safeEndedAt.toISOString(),
+    };
+  });
+
+  const { error } = await getSupabaseBrowserClient()
+    .from("pomodoro_sessions")
+    .upsert(payload, {
+      onConflict: "id",
+      ignoreDuplicates: true,
+    });
+
+  if (error) throw error;
 }

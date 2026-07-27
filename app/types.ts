@@ -9,4 +9,4 @@ export type Task = {
   pomodoros: number;
 };
 
-export type TimerMode = "focus" | "short" | "long";
+export type TimerMode = "focus" | "rest";

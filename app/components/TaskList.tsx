@@ -72,7 +72,7 @@ export function TaskList({
       <header className="content-heading">
         <div>
           <p className="eyebrow">7월 18일 토요일</p>
-          <h1 id="today-title">오늘도 한 걸음씩.</h1>
+          <h1 id="today-title">오늘 할 일</h1>
           <p className="heading-note">가장 중요한 일 하나부터 시작해 보세요.</p>
         </div>
         <span className="remaining-pill">{remaining}개 남음</span>

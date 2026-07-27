@@ -10,8 +10,10 @@ import type {
 } from "./database.types";
 
 export type CreateTodoInput = {
+  id?: string;
   title: string;
   label?: TodoLabel;
+  completed?: boolean;
   dueAt?: string | null;
   position?: number;
   estimatedPomodoros?: number;
@@ -31,24 +33,36 @@ export async function listTodos(): Promise<TodoRow[]> {
 }
 
 export async function createTodo(input: CreateTodoInput): Promise<TodoRow> {
-  const user = await requireCurrentUser();
-  const title = input.title.trim();
-  if (!title) throw new Error("할 일 제목을 입력해 주세요.");
+  const [created] = await createTodos([input]);
+  return created;
+}
 
-  const payload: TodoInsert = {
-    user_id: user.id,
-    title,
-    label: input.label ?? "personal",
-    due_at: input.dueAt ?? null,
-    position: input.position ?? 0,
-    estimated_pomodoros: input.estimatedPomodoros ?? 1,
-  };
+export async function createTodos(
+  inputs: CreateTodoInput[],
+): Promise<TodoRow[]> {
+  const user = await requireCurrentUser();
+  const payload: TodoInsert[] = inputs.map((input) => {
+    const title = input.title.trim();
+    if (!title) throw new Error("할 일 제목을 입력해 주세요.");
+
+    return {
+      id: input.id,
+      user_id: user.id,
+      title,
+      label: input.label ?? "personal",
+      completed: input.completed ?? false,
+      due_at: input.dueAt ?? null,
+      position: input.position ?? 0,
+      estimated_pomodoros: input.estimatedPomodoros ?? 1,
+    };
+  });
+
+  if (payload.length === 0) return [];
 
   const { data, error } = await getSupabaseBrowserClient()
     .from("todos")
     .insert(payload)
-    .select("*")
-    .single();
+    .select("*");
 
   if (error) throw error;
   return data;

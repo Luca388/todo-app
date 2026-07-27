@@ -13,9 +13,11 @@ import {
   cancelPomodoro,
   completePomodoro,
   createTodo,
+  createTodos,
   deleteTodo,
   getActivePomodoro,
   getCurrentSession,
+  importCompletedPomodoros,
   isSupabaseConfigured,
   listRecentPomodoros,
   listTodos,
@@ -32,7 +34,7 @@ import {
   type TodoLabel,
   type TodoRow,
 } from "../../lib/supabase";
-import { initialTasks, timerDurations } from "../data";
+import { defaultTimerDurations, initialTasks } from "../data";
 import type { Task, TaskLabel, TimerMode } from "../types";
 import { FocusTimer } from "./FocusTimer";
 import { Sidebar } from "./Sidebar";
@@ -56,17 +58,182 @@ const taskLabels: Record<TodoLabel, TaskLabel> = {
   health: "건강",
 };
 
+const todoLabels: Record<TaskLabel, TodoLabel> = {
+  업무: "work",
+  개인: "personal",
+  건강: "health",
+};
+
 const pomodoroModes: Record<TimerMode, PomodoroMode> = {
   focus: "focus",
-  short: "short_break",
-  long: "long_break",
+  rest: "short_break",
 };
 
 const timerModes: Record<PomodoroMode, TimerMode> = {
   focus: "focus",
-  short_break: "short",
-  long_break: "long",
+  short_break: "rest",
+  long_break: "rest",
 };
+
+const GUEST_DATA_KEY = "haru:guest-data:v1";
+const GUEST_TIMER_KEY = "haru:guest-timer:v1";
+const TIMER_SETTINGS_KEY = "haru:timer-settings:v1";
+
+type TimerDurations = Record<TimerMode, number>;
+
+type GuestCompletedSession = {
+  id: string;
+  elapsedSeconds: number;
+  endedAt: string;
+  taskId: string | null;
+};
+
+type GuestTimerSession = {
+  elapsedSeconds: number;
+  lastResumedAt: number | null;
+  mode: TimerMode;
+  plannedSeconds: number;
+  status: "running" | "paused";
+  taskId: string | null;
+};
+
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
+function isTask(value: unknown): value is Task {
+  if (!value || typeof value !== "object") return false;
+  const task = value as Partial<Task>;
+  return (
+    typeof task.id === "string" &&
+    typeof task.title === "string" &&
+    (task.label === "업무" ||
+      task.label === "개인" ||
+      task.label === "건강") &&
+    typeof task.estimate === "number" &&
+    Number.isFinite(task.estimate) &&
+    typeof task.completed === "boolean" &&
+    typeof task.pomodoros === "number" &&
+    Number.isFinite(task.pomodoros)
+  );
+}
+
+function readGuestData() {
+  try {
+    const raw = window.localStorage.getItem(GUEST_DATA_KEY);
+    if (!raw) {
+      return {
+        tasks: initialTasks,
+        sessions: [] as GuestCompletedSession[],
+      };
+    }
+
+    const parsed = JSON.parse(raw) as {
+      tasks?: unknown;
+      sessions?: unknown;
+    };
+    const tasks = Array.isArray(parsed.tasks)
+      ? parsed.tasks.filter(isTask)
+      : initialTasks;
+    const sessions = Array.isArray(parsed.sessions)
+      ? parsed.sessions.filter((value): value is GuestCompletedSession => {
+          if (!value || typeof value !== "object") return false;
+          const session = value as Partial<GuestCompletedSession>;
+          return (
+            typeof session.elapsedSeconds === "number" &&
+            Number.isFinite(session.elapsedSeconds) &&
+            typeof session.endedAt === "string" &&
+            (typeof session.taskId === "string" || session.taskId === null)
+          );
+        }).map((session) => ({
+          ...session,
+          id:
+            typeof session.id === "string"
+              ? session.id
+              : window.crypto.randomUUID(),
+        }))
+      : [];
+
+    return { tasks, sessions };
+  } catch {
+    return {
+      tasks: initialTasks,
+      sessions: [] as GuestCompletedSession[],
+    };
+  }
+}
+
+function readTimerSettings(): TimerDurations {
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(TIMER_SETTINGS_KEY) ?? "{}",
+    ) as Partial<TimerDurations>;
+    return {
+      focus:
+        typeof parsed.focus === "number" && Number.isFinite(parsed.focus)
+          ? Math.min(Math.max(parsed.focus, 60), 86400)
+          : defaultTimerDurations.focus,
+      rest:
+        typeof parsed.rest === "number" && Number.isFinite(parsed.rest)
+          ? Math.min(Math.max(parsed.rest, 60), 86400)
+          : defaultTimerDurations.rest,
+    };
+  } catch {
+    return { ...defaultTimerDurations };
+  }
+}
+
+function readGuestTimer(): GuestTimerSession | null {
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(GUEST_TIMER_KEY) ?? "null",
+    ) as Partial<GuestTimerSession> | null;
+    if (
+      !parsed ||
+      (parsed.mode !== "focus" && parsed.mode !== "rest") ||
+      (parsed.status !== "running" && parsed.status !== "paused") ||
+      typeof parsed.plannedSeconds !== "number" ||
+      !Number.isFinite(parsed.plannedSeconds) ||
+      typeof parsed.elapsedSeconds !== "number" ||
+      !Number.isFinite(parsed.elapsedSeconds) ||
+      (typeof parsed.lastResumedAt !== "number" &&
+        parsed.lastResumedAt !== null) ||
+      (typeof parsed.taskId !== "string" && parsed.taskId !== null)
+    ) {
+      return null;
+    }
+
+    return {
+      elapsedSeconds: Math.max(0, parsed.elapsedSeconds),
+      lastResumedAt: parsed.lastResumedAt,
+      mode: parsed.mode,
+      plannedSeconds: Math.min(
+        Math.max(parsed.plannedSeconds, 60),
+        86400,
+      ),
+      status: parsed.status,
+      taskId: parsed.taskId,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getGuestTimerElapsed(
+  session: GuestTimerSession,
+  now = Date.now(),
+) {
+  if (session.status === "paused" || session.lastResumedAt === null) {
+    return session.elapsedSeconds;
+  }
+
+  return Math.min(
+    session.plannedSeconds,
+    session.elapsedSeconds +
+      Math.max(0, Math.floor((now - session.lastResumedAt) / 1000)),
+  );
+}
 
 function todoRowToTask(todo: TodoRow): Task {
   return {
@@ -113,13 +280,26 @@ type RemoteTodosState = {
 export function TodoTimerApp() {
   const supabaseConfigured = isSupabaseConfigured();
   const [guestTasks, setGuestTasks] = useState(initialTasks);
+  const [guestCompletedSessions, setGuestCompletedSessions] = useState<
+    GuestCompletedSession[]
+  >([]);
+  const [guestStorageReady, setGuestStorageReady] = useState(false);
+  const [guestTimer, setGuestTimer] = useState<GuestTimerSession | null>(null);
   const [remoteTodos, setRemoteTodos] = useState<RemoteTodosState | null>(null);
-  const [activeTaskId, setActiveTaskId] = useState<string | null>("2");
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [newTask, setNewTask] = useState("");
   const [mode, setMode] = useState<TimerMode>("focus");
-  const [remainingSeconds, setRemainingSeconds] = useState(timerDurations.focus);
+  const [timerDurations, setTimerDurations] = useState<TimerDurations>({
+    ...defaultTimerDurations,
+  });
+  const [remainingSeconds, setRemainingSeconds] = useState(
+    defaultTimerDurations.focus,
+  );
   const [isRunning, setIsRunning] = useState(false);
-  const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const [installMessage, setInstallMessage] = useState<string | null>(null);
+  const [installPrompt, setInstallPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+  const [migrationNotice, setMigrationNotice] = useState<string | null>(null);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(!supabaseConfigured);
   const [authPending, setAuthPending] = useState(false);
@@ -137,7 +317,6 @@ export function TodoTimerApp() {
   const [pomodoroPending, setPomodoroPending] = useState(false);
   const [pomodoroError, setPomodoroError] = useState<string | null>(null);
   const [pomodoroReloadToken, setPomodoroReloadToken] = useState(0);
-  const [guestSessionActive, setGuestSessionActive] = useState(false);
   const [pomodoroCounts, setPomodoroCounts] = useState<Record<string, number>>(
     {},
   );
@@ -147,6 +326,7 @@ export function TodoTimerApp() {
   });
   const remainingSnapshot = useRef(remainingSeconds);
   const pomodoroChannel = useRef<BroadcastChannel | null>(null);
+  const guestMigrationUser = useRef<string | null>(null);
 
   const authUserId = authUser?.id;
   const currentRemoteTodos =
@@ -173,18 +353,22 @@ export function TodoTimerApp() {
     authUserId && pomodoroLoadedForUser !== authUserId,
   );
   const hasActiveTimerSession = Boolean(
-    currentPomodoro || (!authUserId && guestSessionActive),
+    currentPomodoro || (!authUserId && guestTimer),
   );
-  const guestCompletedSessions = guestTasks.reduce(
-    (total, task) => total + task.pomodoros,
-    0,
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayGuestSessions = guestCompletedSessions.filter(
+    (session) => new Date(session.endedAt).getTime() >= todayStart.getTime(),
   );
   const todayFocusSeconds = authUserId
     ? remoteFocusSummary.seconds
-    : guestCompletedSessions * timerDurations.focus;
+    : todayGuestSessions.reduce(
+        (total, session) => total + session.elapsedSeconds,
+        0,
+      );
   const todayCompletedSessions = authUserId
     ? remoteFocusSummary.sessions
-    : guestCompletedSessions;
+    : todayGuestSessions.length;
   const completedCount = tasks.filter((task) => task.completed).length;
   const authDisplayName = authUser ? getUserDisplayName(authUser) : "게스트 모드";
   const authInitial = authUser
@@ -221,6 +405,116 @@ export function TodoTimerApp() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+
+      const guestData = readGuestData();
+      const settings = readTimerSettings();
+      const storedTimer = readGuestTimer();
+
+      setGuestTasks(guestData.tasks);
+      setGuestCompletedSessions(guestData.sessions);
+      setTimerDurations(settings);
+      setGuestTimer(storedTimer);
+      setGuestStorageReady(true);
+
+      if (storedTimer) {
+        const elapsed = getGuestTimerElapsed(storedTimer);
+        const remaining = Math.max(
+          0,
+          storedTimer.plannedSeconds - elapsed,
+        );
+        setMode(storedTimer.mode);
+        setActiveTaskId(
+          storedTimer.mode === "focus" ? storedTimer.taskId : null,
+        );
+        setRemainingSeconds(remaining);
+        remainingSnapshot.current = remaining;
+        setIsRunning(storedTimer.status === "running");
+      } else {
+        setActiveTaskId(
+          guestData.tasks.find((task) => !task.completed)?.id ?? null,
+        );
+        setRemainingSeconds(settings.focus);
+        remainingSnapshot.current = settings.focus;
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!guestStorageReady || authUserId) return;
+    window.localStorage.setItem(
+      GUEST_DATA_KEY,
+      JSON.stringify({
+        sessions: guestCompletedSessions,
+        tasks: guestTasks,
+      }),
+    );
+  }, [
+    authUserId,
+    guestCompletedSessions,
+    guestStorageReady,
+    guestTasks,
+  ]);
+
+  useEffect(() => {
+    if (!guestStorageReady || authUserId) return;
+
+    if (guestTimer) {
+      window.localStorage.setItem(
+        GUEST_TIMER_KEY,
+        JSON.stringify(guestTimer),
+      );
+    } else {
+      window.localStorage.removeItem(GUEST_TIMER_KEY);
+    }
+  }, [authUserId, guestStorageReady, guestTimer]);
+
+  useEffect(() => {
+    if (!guestStorageReady) return;
+    window.localStorage.setItem(
+      TIMER_SETTINGS_KEY,
+      JSON.stringify(timerDurations),
+    );
+  }, [guestStorageReady, timerDurations]);
+
+  useEffect(() => {
+    function handleBeforeInstallPrompt(event: Event) {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    }
+
+    function handleAppInstalled() {
+      setInstallPrompt(null);
+      setInstallMessage("하루 앱이 설치되었습니다.");
+    }
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    if (
+      process.env.NODE_ENV === "production" &&
+      "serviceWorker" in navigator
+    ) {
+      void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    }
+
+    return () => {
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt,
+      );
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof BroadcastChannel === "undefined") return;
 
     const channel = new BroadcastChannel("haru-pomodoro");
@@ -244,14 +538,42 @@ export function TodoTimerApp() {
     function applyUser(user: User | null) {
       setAuthUser(user);
       if (!user) {
-        setActiveTaskId("2");
+        const storedGuestData = readGuestData();
+        const storedTimerSettings = readTimerSettings();
+        const storedGuestTimer = readGuestTimer();
+        guestMigrationUser.current = null;
         setTodoActionError(null);
         setPendingTodoIds(new Set());
         setActivePomodoro(null);
         setPomodoroLoadedForUser(null);
         setPomodoroError(null);
         setPomodoroPending(false);
-        setIsRunning(false);
+
+        if (storedGuestTimer) {
+          const elapsed = getGuestTimerElapsed(storedGuestTimer);
+          const remaining = Math.max(
+            0,
+            storedGuestTimer.plannedSeconds - elapsed,
+          );
+          setGuestTimer(storedGuestTimer);
+          setActiveTaskId(
+            storedGuestTimer.mode === "focus"
+              ? storedGuestTimer.taskId
+              : null,
+          );
+          setMode(storedGuestTimer.mode);
+          setRemainingSeconds(remaining);
+          remainingSnapshot.current = remaining;
+          setIsRunning(storedGuestTimer.status === "running");
+        } else {
+          setActiveTaskId(
+            storedGuestData.tasks.find((task) => !task.completed)?.id ?? null,
+          );
+          setIsRunning(false);
+          setMode("focus");
+          setRemainingSeconds(storedTimerSettings.focus);
+          remainingSnapshot.current = storedTimerSettings.focus;
+        }
       }
     }
 
@@ -280,17 +602,99 @@ export function TodoTimerApp() {
   }, [supabaseConfigured]);
 
   useEffect(() => {
-    if (!authUserId) return;
+    if (!authUserId || !guestStorageReady) return;
 
+    const ownerId = authUserId;
     let mounted = true;
 
-    listTodos()
-      .then((todos) => {
+    async function loadAndMigrateTodos() {
+      try {
+        const todos = await listTodos();
+        let nextTodos = todos;
+
+        if (
+          guestMigrationUser.current !== ownerId &&
+          (guestTasks.length > 0 || guestCompletedSessions.length > 0)
+        ) {
+          guestMigrationUser.current = ownerId;
+
+          const availableTodos = new Map<string, string[]>();
+          for (const todo of todos) {
+            const key = [
+              todo.title.trim(),
+              todo.label,
+              todo.completed,
+              todo.estimated_pomodoros,
+            ].join("\u0000");
+            const ids = availableTodos.get(key) ?? [];
+            ids.push(todo.id);
+            availableTodos.set(key, ids);
+          }
+
+          const guestTodoIds = new Map<string, string>();
+          const todosToCreate = guestTasks.flatMap((task, index) => {
+            const label = todoLabels[task.label];
+            const key = [
+              task.title.trim(),
+              label,
+              task.completed,
+              task.estimate,
+            ].join("\u0000");
+            const matchingIds = availableTodos.get(key);
+            const matchingId = matchingIds?.shift();
+
+            if (matchingId) {
+              guestTodoIds.set(task.id, matchingId);
+              return [];
+            }
+
+            const id = window.crypto.randomUUID();
+            guestTodoIds.set(task.id, id);
+            return [
+              {
+                id,
+                title: task.title,
+                label,
+                completed: task.completed,
+                position: todos.length + index,
+                estimatedPomodoros: task.estimate,
+              },
+            ];
+          });
+
+          const created = await createTodos(todosToCreate);
+          await importCompletedPomodoros(
+            guestCompletedSessions.map((session) => ({
+              id: session.id,
+              todoId: session.taskId
+                ? (guestTodoIds.get(session.taskId) ?? null)
+                : null,
+              elapsedSeconds: session.elapsedSeconds,
+              endedAt: session.endedAt,
+            })),
+          );
+
+          nextTodos = [...todos, ...created].sort(
+            (left, right) => left.position - right.position,
+          );
+          window.localStorage.removeItem(GUEST_DATA_KEY);
+          window.localStorage.removeItem(GUEST_TIMER_KEY);
+          setGuestTasks([]);
+          setGuestCompletedSessions([]);
+          setGuestTimer(null);
+          setPomodoroLoadedForUser(null);
+          setPomodoroReloadToken((current) => current + 1);
+          broadcastPomodoroChange();
+          setMigrationNotice(
+            `게스트 할 일 ${guestTasks.length}개와 집중 기록 ${guestCompletedSessions.length}개를 계정으로 옮겼습니다.`,
+          );
+        }
+
         if (!mounted) return;
 
-        const nextTasks = todos.map(todoRowToTask);
+        const nextTasks = nextTodos.map(todoRowToTask);
         setRemoteTodos({
-          ownerId: authUserId,
+          ownerId,
           tasks: nextTasks,
           error: null,
         });
@@ -300,20 +704,30 @@ export function TodoTimerApp() {
             ? current
             : (nextTasks.find((task) => !task.completed)?.id ?? null),
         );
-      })
-      .catch((error: unknown) => {
+      } catch (error) {
         if (!mounted) return;
+        guestMigrationUser.current = null;
         setRemoteTodos({
-          ownerId: authUserId,
+          ownerId,
           tasks: [],
           error: getAuthErrorMessage(error),
         });
-      });
+      }
+    }
+
+    void loadAndMigrateTodos();
 
     return () => {
       mounted = false;
     };
-  }, [authUserId, todoReloadToken]);
+  }, [
+    authUserId,
+    broadcastPomodoroChange,
+    guestCompletedSessions,
+    guestStorageReady,
+    guestTasks,
+    todoReloadToken,
+  ]);
 
   useEffect(() => {
     if (!authUserId) return;
@@ -440,17 +854,28 @@ export function TodoTimerApp() {
               setPomodoroPending(false);
             });
         } else {
-          setGuestSessionActive(false);
+          setGuestTimer(null);
         }
 
         if (!authUserId && mode === "focus" && activeTaskId !== null) {
+          const elapsedSeconds =
+            guestTimer?.plannedSeconds ?? timerDurations.focus;
           updateVisibleTasks((current) =>
             current.map((task) =>
               task.id === activeTaskId
                 ? { ...task, pomodoros: task.pomodoros + 1 }
                 : task,
-            ),
+              ),
           );
+          setGuestCompletedSessions((current) => [
+            ...current,
+            {
+              id: window.crypto.randomUUID(),
+              elapsedSeconds,
+              endedAt: new Date().toISOString(),
+              taskId: activeTaskId,
+            },
+          ]);
         }
       }
     }, 250);
@@ -461,8 +886,10 @@ export function TodoTimerApp() {
     authUserId,
     broadcastPomodoroChange,
     currentPomodoro,
+    guestTimer,
     isRunning,
     mode,
+    timerDurations.focus,
     updateVisibleTasks,
   ]);
 
@@ -475,7 +902,20 @@ export function TodoTimerApp() {
     if (hasActiveTimerSession || pomodoroPending) return;
     setMode(nextMode);
     setRemainingSeconds(timerDurations[nextMode]);
+    remainingSnapshot.current = timerDurations[nextMode];
     setIsRunning(false);
+  }
+
+  function handleDurationChange(seconds: number) {
+    if (hasActiveTimerSession || pomodoroPending) return;
+
+    const safeSeconds = Math.min(Math.max(Math.floor(seconds), 60), 86400);
+    setTimerDurations((current) => ({
+      ...current,
+      [mode]: safeSeconds,
+    }));
+    setRemainingSeconds(safeSeconds);
+    remainingSnapshot.current = safeSeconds;
   }
 
   async function handleToggleTask(id: string) {
@@ -543,7 +983,7 @@ export function TodoTimerApp() {
       setGuestTasks((current) => [
         ...current,
         {
-          id: Date.now().toString(),
+          id: window.crypto.randomUUID(),
           title,
           label: "개인",
           estimate: 1,
@@ -660,6 +1100,7 @@ export function TodoTimerApp() {
       );
       setIsRunning(false);
       setRemainingSeconds(timerDurations[mode]);
+      remainingSnapshot.current = timerDurations[mode];
     }
 
     return true;
@@ -677,7 +1118,22 @@ export function TodoTimerApp() {
     if (isRunning) {
       setIsRunning(false);
 
-      if (!authUserId || !currentPomodoro) return;
+      if (!authUserId) {
+        if (guestTimer) {
+          setGuestTimer({
+            ...guestTimer,
+            elapsedSeconds: Math.max(
+              0,
+              guestTimer.plannedSeconds - remainingSeconds,
+            ),
+            lastResumedAt: null,
+            status: "paused",
+          });
+        }
+        return;
+      }
+
+      if (!currentPomodoro) return;
 
       const elapsedSeconds = Math.max(
         0,
@@ -707,11 +1163,20 @@ export function TodoTimerApp() {
     }
 
     if (hasActiveTimerSession) {
-      if (!authUserId || !currentPomodoro) {
+      if (!authUserId) {
+        if (guestTimer) {
+          setGuestTimer({
+            ...guestTimer,
+            lastResumedAt: Date.now(),
+            status: "running",
+          });
+        }
         remainingSnapshot.current = remainingSeconds;
         setIsRunning(true);
         return;
       }
+
+      if (!currentPomodoro) return;
 
       setPomodoroPending(true);
       setPomodoroError(null);
@@ -737,7 +1202,17 @@ export function TodoTimerApp() {
     setPomodoroError(null);
 
     if (!authUserId) {
-      setGuestSessionActive(true);
+      const guestSession: GuestTimerSession = {
+        elapsedSeconds: 0,
+        lastResumedAt: Date.now(),
+        mode,
+        plannedSeconds: timerDurations[mode],
+        status: "running",
+        taskId: mode === "focus" ? (activeTask?.id ?? null) : null,
+      };
+      setGuestTimer(guestSession);
+      setRemainingSeconds(guestSession.plannedSeconds);
+      remainingSnapshot.current = guestSession.plannedSeconds;
       setIsRunning(true);
       return;
     }
@@ -775,13 +1250,15 @@ export function TodoTimerApp() {
     setPomodoroError(null);
 
     if (!authUserId) {
-      setGuestSessionActive(false);
+      setGuestTimer(null);
       setRemainingSeconds(timerDurations[mode]);
+      remainingSnapshot.current = timerDurations[mode];
       return;
     }
 
     if (!currentPomodoro) {
       setRemainingSeconds(timerDurations[mode]);
+      remainingSnapshot.current = timerDurations[mode];
       return;
     }
 
@@ -812,7 +1289,40 @@ export function TodoTimerApp() {
     setActiveTaskId(id);
     setMode("focus");
     setRemainingSeconds(timerDurations.focus);
+    remainingSnapshot.current = timerDurations.focus;
     setIsRunning(false);
+  }
+
+  async function handleInstallApp() {
+    const navigatorWithStandalone = window.navigator as Navigator & {
+      standalone?: boolean;
+    };
+    if (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      navigatorWithStandalone.standalone
+    ) {
+      setInstallMessage("이미 앱으로 실행 중입니다.");
+      return;
+    }
+
+    if (installPrompt) {
+      await installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+      setInstallPrompt(null);
+      setInstallMessage(
+        choice.outcome === "accepted"
+          ? "설치를 시작했습니다."
+          : "설치를 취소했습니다.",
+      );
+      return;
+    }
+
+    const isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+    setInstallMessage(
+      isIos
+        ? "Safari의 공유 버튼을 누른 뒤 ‘홈 화면에 추가’를 선택하세요."
+        : "브라우저 메뉴에서 ‘앱 설치’ 또는 ‘홈 화면에 추가’를 선택하세요.",
+    );
   }
 
   async function handleAuthAction() {
@@ -832,6 +1342,9 @@ export function TodoTimerApp() {
         }
         await signOut();
       } else {
+        setIsRunning(false);
+        setGuestTimer(null);
+        window.localStorage.removeItem(GUEST_TIMER_KEY);
         await signInWithGoogle();
       }
     } catch (error) {
@@ -877,19 +1390,29 @@ export function TodoTimerApp() {
             <div className="progress-track"><span style={{ width: `${progressPercent}%` }} /></div>
             <strong>{progressPercent}%</strong>
           </div>
-          <button className="install-button" type="button" onClick={() => setShowInstallHelp(true)}>
+          <button className="install-button" type="button" onClick={handleInstallApp}>
             <span aria-hidden="true">⇩</span> 앱으로 설치
           </button>
           <button className="notification-button" type="button" aria-label="알림">♢</button>
         </div>
 
-        {showInstallHelp && (
+        {installMessage && (
           <div className="install-preview" role="status">
             <div>
               <strong>홈 화면에 하루 추가</strong>
-              <span>실제 PWA 연결 시 이 버튼으로 바로 설치할 수 있어요.</span>
+              <span>{installMessage}</span>
             </div>
-            <button type="button" onClick={() => setShowInstallHelp(false)} aria-label="닫기">×</button>
+            <button type="button" onClick={() => setInstallMessage(null)} aria-label="닫기">×</button>
+          </div>
+        )}
+
+        {migrationNotice && (
+          <div className="install-preview" role="status">
+            <div>
+              <strong>게스트 데이터 이전 완료</strong>
+              <span>{migrationNotice}</span>
+            </div>
+            <button type="button" onClick={() => setMigrationNotice(null)} aria-label="닫기">×</button>
           </div>
         )}
 
@@ -929,10 +1452,15 @@ export function TodoTimerApp() {
             isPending={pomodoroPending || pomodoroLoading}
             mode={mode}
             remainingSeconds={remainingSeconds}
-            totalSeconds={timerDurations[mode]}
+            totalSeconds={
+              currentPomodoro?.planned_seconds ??
+              guestTimer?.plannedSeconds ??
+              timerDurations[mode]
+            }
             todayCompletedSessions={todayCompletedSessions}
             todayFocusSeconds={todayFocusSeconds}
             isRunning={isRunning}
+            onDurationChange={handleDurationChange}
             onModeChange={handleModeChange}
             onRetry={handleRetryPomodoro}
             onToggleRunning={handleToggleTimer}

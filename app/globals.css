@@ -903,6 +903,55 @@ input:focus-visible {
   letter-spacing: -0.07em;
 }
 
+.timer-time-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.timer-time-button:disabled {
+  cursor: default;
+}
+
+.timer-duration-editor {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin: 7px 0 5px;
+}
+
+.timer-duration-editor label {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+}
+
+.timer-duration-editor input {
+  width: 76px;
+  border: 1px solid rgba(92, 78, 130, 0.24);
+  border-radius: 10px;
+  padding: 5px 7px;
+  background: #fff;
+  color: var(--ink);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 25px;
+  text-align: center;
+}
+
+.timer-duration-editor button {
+  border: 0;
+  border-radius: 7px;
+  padding: 5px 10px;
+  background: var(--green);
+  color: #fff;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 800;
+}
+
 .timer-face small {
   color: #8c8798;
   font-size: 8px;
@@ -1030,19 +1079,6 @@ input:focus-visible {
 
 .focus-summary strong {
   font-size: 12px;
-}
-
-.focus-column blockquote {
-  margin: 11px 0 0;
-  padding: 13px 16px;
-  border-radius: 13px;
-  background: var(--green);
-  color: rgba(255, 255, 255, 0.84);
-  font-family: Georgia, serif;
-  font-size: 11px;
-  font-style: italic;
-  line-height: 1.5;
-  text-align: center;
 }
 
 @media (max-width: 1000px) {

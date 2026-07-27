@@ -14,12 +14,14 @@ import {
   completePomodoro,
   createTodo,
   deleteTodo,
+  getActivePomodoro,
   getCurrentSession,
-  getRunningPomodoro,
   isSupabaseConfigured,
   listRecentPomodoros,
   listTodos,
   onAuthStateChange,
+  pausePomodoro,
+  resumePomodoro,
   setTodoCompleted,
   signInWithGoogle,
   signOut,
@@ -77,6 +79,31 @@ function todoRowToTask(todo: TodoRow): Task {
   };
 }
 
+function getPomodoroElapsed(
+  session: PomodoroSessionRow,
+  now = Date.now(),
+) {
+  const savedElapsed = Math.max(0, session.elapsed_seconds);
+  if (session.status !== "running") return savedElapsed;
+
+  const resumedAt = session.last_resumed_at ?? session.started_at;
+  const currentRunElapsed = Math.max(
+    0,
+    Math.floor((now - new Date(resumedAt).getTime()) / 1000),
+  );
+  return Math.min(
+    session.planned_seconds,
+    savedElapsed + currentRunElapsed,
+  );
+}
+
+function getPomodoroRemaining(session: PomodoroSessionRow) {
+  return Math.max(
+    0,
+    session.planned_seconds - getPomodoroElapsed(session),
+  );
+}
+
 type RemoteTodosState = {
   ownerId: string;
   tasks: Task[];
@@ -109,6 +136,7 @@ export function TodoTimerApp() {
     useState<string | null>(null);
   const [pomodoroPending, setPomodoroPending] = useState(false);
   const [pomodoroError, setPomodoroError] = useState<string | null>(null);
+  const [pomodoroReloadToken, setPomodoroReloadToken] = useState(0);
   const [guestSessionActive, setGuestSessionActive] = useState(false);
   const [pomodoroCounts, setPomodoroCounts] = useState<Record<string, number>>(
     {},
@@ -118,6 +146,7 @@ export function TodoTimerApp() {
     sessions: 0,
   });
   const remainingSnapshot = useRef(remainingSeconds);
+  const pomodoroChannel = useRef<BroadcastChannel | null>(null);
 
   const authUserId = authUser?.id;
   const currentRemoteTodos =
@@ -186,6 +215,26 @@ export function TodoTimerApp() {
     },
     [authUserId],
   );
+
+  const broadcastPomodoroChange = useCallback(() => {
+    pomodoroChannel.current?.postMessage("pomodoro-changed");
+  }, []);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+
+    const channel = new BroadcastChannel("haru-pomodoro");
+    pomodoroChannel.current = channel;
+    channel.onmessage = () => {
+      setPomodoroLoadedForUser(null);
+      setPomodoroReloadToken((current) => current + 1);
+    };
+
+    return () => {
+      channel.close();
+      pomodoroChannel.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!supabaseConfigured) return;
@@ -272,12 +321,13 @@ export function TodoTimerApp() {
     let mounted = true;
 
     Promise.allSettled([
-      getRunningPomodoro(),
+      getActivePomodoro(),
       listRecentPomodoros(100),
-    ]).then(([runningResult, recentResult]) => {
+    ]).then(([activeResult, recentResult]) => {
       if (!mounted) return;
 
       setPomodoroLoadedForUser(authUserId);
+      setPomodoroError(null);
 
       if (recentResult.status === "fulfilled") {
         const completedFocusSessions = recentResult.value.filter(
@@ -310,44 +360,35 @@ export function TodoTimerApp() {
         setPomodoroError(getAuthErrorMessage(recentResult.reason));
       }
 
-      if (runningResult.status === "fulfilled") {
-        const running = runningResult.value;
-        setActivePomodoro(running);
+      if (activeResult.status === "fulfilled") {
+        const active = activeResult.value;
+        setActivePomodoro(active);
 
-        if (running) {
-          const nextMode = timerModes[running.mode];
-          const elapsedSinceStart = Math.max(
-            0,
-            Math.floor(
-              (Date.now() - new Date(running.started_at).getTime()) / 1000,
-            ),
-          );
-          const elapsed = Math.max(
-            running.elapsed_seconds,
-            elapsedSinceStart,
-          );
-          const remaining = Math.max(
-            0,
-            running.planned_seconds - elapsed,
-          );
+        if (active) {
+          const nextMode = timerModes[active.mode];
+          const remaining = getPomodoroRemaining(active);
 
           setMode(nextMode);
           setRemainingSeconds(remaining);
+          remainingSnapshot.current = remaining;
           setActiveTaskId((current) =>
-            running.mode === "focus" ? running.todo_id : current,
+            active.mode === "focus" ? active.todo_id : current,
           );
-          setIsRunning(true);
+          setIsRunning(active.status === "running");
+        } else {
+          setIsRunning(false);
         }
       } else {
         setActivePomodoro(null);
-        setPomodoroError(getAuthErrorMessage(runningResult.reason));
+        setIsRunning(false);
+        setPomodoroError(getAuthErrorMessage(activeResult.reason));
       }
     });
 
     return () => {
       mounted = false;
     };
-  }, [authUserId]);
+  }, [authUserId, pomodoroReloadToken]);
 
   useEffect(() => {
     if (!isRunning) remainingSnapshot.current = remainingSeconds;
@@ -375,6 +416,7 @@ export function TodoTimerApp() {
           )
             .then((completed) => {
               setActivePomodoro(null);
+              broadcastPomodoroChange();
 
               if (completed.mode === "focus") {
                 const todoId = completed.todo_id;
@@ -417,6 +459,7 @@ export function TodoTimerApp() {
   }, [
     activeTaskId,
     authUserId,
+    broadcastPomodoroChange,
     currentPomodoro,
     isRunning,
     mode,
@@ -633,11 +676,59 @@ export function TodoTimerApp() {
 
     if (isRunning) {
       setIsRunning(false);
+
+      if (!authUserId || !currentPomodoro) return;
+
+      const elapsedSeconds = Math.max(
+        0,
+        currentPomodoro.planned_seconds - remainingSeconds,
+      );
+      setPomodoroPending(true);
+      setPomodoroError(null);
+
+      try {
+        const paused = await pausePomodoro(
+          currentPomodoro.id,
+          elapsedSeconds,
+        );
+        const remaining = getPomodoroRemaining(paused);
+        setActivePomodoro(paused);
+        setRemainingSeconds(remaining);
+        remainingSnapshot.current = remaining;
+        broadcastPomodoroChange();
+      } catch (error) {
+        remainingSnapshot.current = remainingSeconds;
+        setIsRunning(true);
+        setPomodoroError(getAuthErrorMessage(error));
+      } finally {
+        setPomodoroPending(false);
+      }
       return;
     }
 
     if (hasActiveTimerSession) {
-      setIsRunning(true);
+      if (!authUserId || !currentPomodoro) {
+        remainingSnapshot.current = remainingSeconds;
+        setIsRunning(true);
+        return;
+      }
+
+      setPomodoroPending(true);
+      setPomodoroError(null);
+
+      try {
+        const resumed = await resumePomodoro(currentPomodoro.id);
+        const remaining = getPomodoroRemaining(resumed);
+        setActivePomodoro(resumed);
+        setRemainingSeconds(remaining);
+        remainingSnapshot.current = remaining;
+        setIsRunning(true);
+        broadcastPomodoroChange();
+      } catch (error) {
+        setPomodoroError(getAuthErrorMessage(error));
+      } finally {
+        setPomodoroPending(false);
+      }
       return;
     }
 
@@ -659,9 +750,17 @@ export function TodoTimerApp() {
         mode: pomodoroModes[mode],
         plannedSeconds: timerDurations[mode],
       });
+      const nextMode = timerModes[started.mode];
+      const remaining = getPomodoroRemaining(started);
       setActivePomodoro(started);
-      setRemainingSeconds(started.planned_seconds);
-      setIsRunning(true);
+      setMode(nextMode);
+      setRemainingSeconds(remaining);
+      remainingSnapshot.current = remaining;
+      setActiveTaskId((current) =>
+        started.mode === "focus" ? started.todo_id : current,
+      );
+      setIsRunning(started.status === "running");
+      broadcastPomodoroChange();
     } catch (error) {
       setPomodoroError(getAuthErrorMessage(error));
     } finally {
@@ -687,20 +786,25 @@ export function TodoTimerApp() {
     }
 
     setPomodoroPending(true);
-    const elapsedSeconds = Math.max(
-      0,
-      currentPomodoro.planned_seconds - remainingSeconds,
-    );
+    const elapsedSeconds = getPomodoroElapsed(currentPomodoro);
 
     try {
       await cancelPomodoro(currentPomodoro.id, elapsedSeconds);
       setActivePomodoro(null);
       setRemainingSeconds(timerDurations[mode]);
+      remainingSnapshot.current = timerDurations[mode];
+      broadcastPomodoroChange();
     } catch (error) {
       setPomodoroError(getAuthErrorMessage(error));
     } finally {
       setPomodoroPending(false);
     }
+  }
+
+  function handleRetryPomodoro() {
+    setPomodoroError(null);
+    setPomodoroLoadedForUser(null);
+    setPomodoroReloadToken((current) => current + 1);
   }
 
   function handleSelectTask(id: string) {
@@ -721,12 +825,10 @@ export function TodoTimerApp() {
       if (authUser) {
         if (currentPomodoro) {
           setIsRunning(false);
-          const elapsedSeconds = Math.max(
-            0,
-            currentPomodoro.planned_seconds - remainingSeconds,
-          );
+          const elapsedSeconds = getPomodoroElapsed(currentPomodoro);
           await cancelPomodoro(currentPomodoro.id, elapsedSeconds);
           setActivePomodoro(null);
+          broadcastPomodoroChange();
         }
         await signOut();
       } else {
@@ -832,6 +934,7 @@ export function TodoTimerApp() {
             todayFocusSeconds={todayFocusSeconds}
             isRunning={isRunning}
             onModeChange={handleModeChange}
+            onRetry={handleRetryPomodoro}
             onToggleRunning={handleToggleTimer}
             onReset={handleResetTimer}
           />

@@ -13,6 +13,7 @@ type FocusTimerProps = {
   todayFocusSeconds: number;
   isRunning: boolean;
   onModeChange: (mode: TimerMode) => void;
+  onRetry: () => void;
   onToggleRunning: () => void;
   onReset: () => void;
 };
@@ -51,6 +52,7 @@ export function FocusTimer({
   todayFocusSeconds,
   isRunning,
   onModeChange,
+  onRetry,
   onToggleRunning,
   onReset,
 }: FocusTimerProps) {
@@ -143,7 +145,14 @@ export function FocusTimer({
           </button>
         </div>
 
-        {error && <p className="timer-error" role="alert">{error}</p>}
+        {error && (
+          <div className="timer-error" role="alert">
+            <span>{error}</span>
+            <button type="button" onClick={onRetry} disabled={isPending}>
+              다시 시도
+            </button>
+          </div>
+        )}
       </section>
 
       <div className="focus-summary">

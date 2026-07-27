@@ -1,6 +1,10 @@
 export type TodoLabel = "work" | "personal" | "health";
 export type PomodoroMode = "focus" | "short_break" | "long_break";
-export type PomodoroStatus = "running" | "completed" | "cancelled";
+export type PomodoroStatus =
+  | "running"
+  | "paused"
+  | "completed"
+  | "cancelled";
 
 export type Database = {
   public: {
@@ -51,6 +55,7 @@ export type Database = {
           planned_seconds: number;
           elapsed_seconds: number;
           started_at: string;
+          last_resumed_at: string | null;
           ended_at: string | null;
           created_at: string;
         };
@@ -63,6 +68,7 @@ export type Database = {
           planned_seconds: number;
           elapsed_seconds?: number;
           started_at?: string;
+          last_resumed_at?: string | null;
           ended_at?: string | null;
           created_at?: string;
         };
@@ -70,6 +76,7 @@ export type Database = {
           todo_id?: string | null;
           status?: PomodoroStatus;
           elapsed_seconds?: number;
+          last_resumed_at?: string | null;
           ended_at?: string | null;
         };
         Relationships: [

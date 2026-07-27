@@ -86,7 +86,7 @@ test("wires authenticated todos to Supabase with visible request states", async 
 });
 
 test("persists and restores the Pomodoro session lifecycle", async () => {
-  const [app, timer] = await Promise.all([
+  const [app, timer, pomodoro, migration] = await Promise.all([
     readFile(
       new URL("../app/components/TodoTimerApp.tsx", import.meta.url),
       "utf8",
@@ -95,15 +95,32 @@ test("persists and restores the Pomodoro session lifecycle", async () => {
       new URL("../app/components/FocusTimer.tsx", import.meta.url),
       "utf8",
     ),
+    readFile(
+      new URL("../lib/supabase/pomodoro.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL(
+        "../supabase/migrations/202607270001_pomodoro_pause_state.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
   ]);
 
-  assert.match(app, /getRunningPomodoro\(\)/);
+  assert.match(app, /getActivePomodoro\(\)/);
   assert.match(app, /listRecentPomodoros\(100\)/);
   assert.match(app, /await startPomodoro\(/);
+  assert.match(app, /await pausePomodoro\(/);
+  assert.match(app, /await resumePomodoro\(/);
   assert.match(app, /completePomodoro\(/);
   assert.match(app, /await cancelPomodoro\(/);
+  assert.match(app, /new BroadcastChannel\("haru-pomodoro"\)/);
+  assert.match(pomodoro, /last_resumed_at/);
+  assert.match(migration, /status in \('running', 'paused'\)/);
   assert.match(timer, /일시정지됨/);
   assert.match(timer, /실행 중인 세션 취소/);
+  assert.match(timer, /다시 시도/);
   assert.match(timer, /todayCompletedSessions/);
   assert.match(timer, /todayFocusSeconds/);
 });

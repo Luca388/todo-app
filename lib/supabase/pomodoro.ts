@@ -191,7 +191,7 @@ export async function listRecentPomodoros(
   limit = 30,
 ): Promise<PomodoroSessionRow[]> {
   const user = await requireCurrentUser();
-  const safeLimit = Math.min(Math.max(limit, 1), 100);
+  const safeLimit = Math.min(Math.max(limit, 1), 1000);
   const { data, error } = await getSupabaseBrowserClient()
     .from("pomodoro_sessions")
     .select("*")

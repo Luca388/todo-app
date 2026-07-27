@@ -9,6 +9,30 @@ export type PomodoroStatus =
 export type Database = {
   public: {
     Tables: {
+      todo_lists: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          position: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string;
+          name: string;
+          position?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          position?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       todos: {
         Row: {
           id: string;
@@ -16,7 +40,9 @@ export type Database = {
           title: string;
           label: TodoLabel;
           completed: boolean;
+          completed_at: string | null;
           due_at: string | null;
+          list_id: string;
           position: number;
           estimated_pomodoros: number;
           created_at: string;
@@ -28,7 +54,9 @@ export type Database = {
           title: string;
           label?: TodoLabel;
           completed?: boolean;
+          completed_at?: string | null;
           due_at?: string | null;
+          list_id?: string;
           position?: number;
           estimated_pomodoros?: number;
           created_at?: string;
@@ -38,7 +66,9 @@ export type Database = {
           title?: string;
           label?: TodoLabel;
           completed?: boolean;
+          completed_at?: string | null;
           due_at?: string | null;
+          list_id?: string;
           position?: number;
           estimated_pomodoros?: number;
           updated_at?: string;
@@ -100,6 +130,12 @@ export type Database = {
 export type TodoRow = Database["public"]["Tables"]["todos"]["Row"];
 export type TodoInsert = Database["public"]["Tables"]["todos"]["Insert"];
 export type TodoUpdate = Database["public"]["Tables"]["todos"]["Update"];
+export type TodoListRow =
+  Database["public"]["Tables"]["todo_lists"]["Row"];
+export type TodoListInsert =
+  Database["public"]["Tables"]["todo_lists"]["Insert"];
+export type TodoListUpdate =
+  Database["public"]["Tables"]["todo_lists"]["Update"];
 
 export type PomodoroSessionRow =
   Database["public"]["Tables"]["pomodoro_sessions"]["Row"];

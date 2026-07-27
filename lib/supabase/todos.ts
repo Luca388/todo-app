@@ -14,7 +14,9 @@ export type CreateTodoInput = {
   title: string;
   label?: TodoLabel;
   completed?: boolean;
+  completedAt?: string | null;
   dueAt?: string | null;
+  listId?: string;
   position?: number;
   estimatedPomodoros?: number;
 };
@@ -51,7 +53,11 @@ export async function createTodos(
       title,
       label: input.label ?? "personal",
       completed: input.completed ?? false,
+      ...(Object.prototype.hasOwnProperty.call(input, "completedAt")
+        ? { completed_at: input.completedAt ?? null }
+        : {}),
       due_at: input.dueAt ?? null,
+      ...(input.listId ? { list_id: input.listId } : {}),
       position: input.position ?? 0,
       estimated_pomodoros: input.estimatedPomodoros ?? 1,
     };
@@ -85,8 +91,17 @@ export async function updateTodo(
   return data;
 }
 
-export function setTodoCompleted(id: string, completed: boolean) {
-  return updateTodo(id, { completed });
+export function setTodoCompleted(
+  id: string,
+  completed: boolean,
+  trackCompletedAt = true,
+) {
+  return updateTodo(id, {
+    completed,
+    ...(trackCompletedAt
+      ? { completed_at: completed ? new Date().toISOString() : null }
+      : {}),
+  });
 }
 
 export async function deleteTodo(id: string): Promise<void> {

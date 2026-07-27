@@ -230,12 +230,6 @@ export function TaskList({
                     }
                   >
                     <strong>{task.title}</strong>
-                    <span>
-                      <span className={`label-dot label-${task.label}`} aria-hidden="true" />
-                      {task.label}
-                      <span className="task-divider">·</span>
-                      {task.pomodoros}/{task.estimate} 포모도로
-                    </span>
                   </button>
 
                   <div className="task-row-actions">

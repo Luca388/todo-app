@@ -596,38 +596,8 @@ button {
   white-space: nowrap;
 }
 
-.task-copy > span {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--text-soft);
-  font-size: 10px;
-}
-
 .task-item.is-complete .task-copy strong {
   text-decoration: line-through;
-}
-
-.task-divider {
-  color: #c0c6c3;
-}
-
-.label-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-}
-
-.label-업무 {
-  background: var(--coral);
-}
-
-.label-개인 {
-  background: var(--purple);
-}
-
-.label-건강 {
-  background: #7daa54;
 }
 
 .task-row-actions {
@@ -826,11 +796,76 @@ button {
   cursor: default;
 }
 
+.repeat-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(21, 63, 51, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.repeat-control > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.repeat-control span {
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.repeat-control small {
+  color: var(--text-soft);
+  font-size: 9px;
+}
+
+.repeat-stepper {
+  display: grid;
+  grid-template-columns: 30px minmax(45px, auto) 30px;
+  align-items: center;
+  min-height: 30px;
+  overflow: hidden;
+  border: 1px solid rgba(21, 63, 51, 0.12);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.repeat-stepper button {
+  height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--forest);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.repeat-stepper button:hover:not(:disabled) {
+  background: #f1f5f2;
+}
+
+.repeat-stepper button:disabled {
+  cursor: default;
+  opacity: 0.32;
+}
+
+.repeat-stepper output {
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 850;
+  text-align: center;
+}
+
 .timer-ring {
   display: grid;
   width: min(285px, 82%);
   aspect-ratio: 1;
-  margin: 27px auto 22px;
+  margin: 20px auto 22px;
   place-items: center;
   border-radius: 50%;
   background:

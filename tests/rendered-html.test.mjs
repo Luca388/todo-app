@@ -92,6 +92,8 @@ test("wires authenticated todos to Supabase with visible request states", async 
   assert.match(taskList, /task\.completed \|\|/);
   assert.match(taskList, /할 일 제목 수정/);
   assert.match(taskList, /이 작업은 되돌릴 수 없습니다/);
+  assert.doesNotMatch(taskList, /\{task\.label\}/);
+  assert.doesNotMatch(taskList, /포모도로/);
 });
 
 test("persists and restores the Pomodoro session lifecycle", async () => {
@@ -125,6 +127,9 @@ test("persists and restores the Pomodoro session lifecycle", async () => {
   assert.match(app, /completePomodoro\(/);
   assert.match(app, /await cancelPomodoro\(/);
   assert.match(app, /handleSkipTimer/);
+  assert.match(app, /startAutomaticSession/);
+  assert.match(app, /DEFAULT_REPEAT_COUNT = 1/);
+  assert.match(app, /currentRound < repeatCount/);
   assert.match(app, /new BroadcastChannel\("haru-pomodoro"\)/);
   assert.match(pomodoro, /last_resumed_at/);
   assert.match(migration, /status in \('running', 'paused'\)/);
@@ -135,6 +140,8 @@ test("persists and restores the Pomodoro session lifecycle", async () => {
   assert.match(timer, /onDurationChange/);
   assert.match(timer, /onSkip/);
   assert.match(timer, /건너뛰기/);
+  assert.match(timer, /집중 반복/);
+  assert.match(timer, /onRepeatCountChange/);
   assert.match(timer, /rest: "휴식"/);
   assert.doesNotMatch(timer, /짧은 휴식|긴 휴식/);
   assert.match(timer, /todayCompletedSessions/);

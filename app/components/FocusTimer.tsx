@@ -13,12 +13,15 @@ type FocusTimerProps = {
   isPending: boolean;
   mode: TimerMode;
   remainingSeconds: number;
+  repeatCount: number;
+  currentRound: number;
   totalSeconds: number;
   todayCompletedSessions: number;
   todayFocusSeconds: number;
   isRunning: boolean;
   onDurationChange: (seconds: number) => void;
   onModeChange: (mode: TimerMode) => void;
+  onRepeatCountChange: (count: number) => void;
   onRetry: () => void;
   onSkip: () => void;
   onToggleRunning: () => void;
@@ -53,12 +56,15 @@ export function FocusTimer({
   isPending,
   mode,
   remainingSeconds,
+  repeatCount,
+  currentRound,
   totalSeconds,
   todayCompletedSessions,
   todayFocusSeconds,
   isRunning,
   onDurationChange,
   onModeChange,
+  onRepeatCountChange,
   onRetry,
   onSkip,
   onToggleRunning,
@@ -133,6 +139,34 @@ export function FocusTimer({
               {modeLabels[key]}
             </button>
           ))}
+        </div>
+
+        <div className="repeat-control">
+          <div>
+            <span>집중 반복</span>
+            <small>
+              {currentRound} / {repeatCount}회
+            </small>
+          </div>
+          <div className="repeat-stepper" aria-label="집중 반복 횟수">
+            <button
+              type="button"
+              onClick={() => onRepeatCountChange(repeatCount - 1)}
+              disabled={hasActiveSession || isPending || repeatCount <= 1}
+              aria-label="반복 횟수 줄이기"
+            >
+              −
+            </button>
+            <output aria-live="polite">{repeatCount}회</output>
+            <button
+              type="button"
+              onClick={() => onRepeatCountChange(repeatCount + 1)}
+              disabled={hasActiveSession || isPending || repeatCount >= 99}
+              aria-label="반복 횟수 늘리기"
+            >
+              ＋
+            </button>
+          </div>
         </div>
 
         <div className="timer-ring" style={timerStyle}>

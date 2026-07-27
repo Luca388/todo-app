@@ -78,8 +78,14 @@ const timerModes: Record<PomodoroMode, TimerMode> = {
 const GUEST_DATA_KEY = "haru:guest-data:v1";
 const GUEST_TIMER_KEY = "haru:guest-timer:v1";
 const TIMER_SETTINGS_KEY = "haru:timer-settings:v1";
+const DEFAULT_REPEAT_COUNT = 1;
+const MAX_REPEAT_COUNT = 99;
 
 type TimerDurations = Record<TimerMode, number>;
+type TimerSettings = TimerDurations & {
+  currentRound: number;
+  repeatCount: number;
+};
 
 type GuestCompletedSession = {
   id: string;
@@ -164,11 +170,19 @@ function readGuestData() {
   }
 }
 
-function readTimerSettings(): TimerDurations {
+function readTimerSettings(): TimerSettings {
   try {
     const parsed = JSON.parse(
       window.localStorage.getItem(TIMER_SETTINGS_KEY) ?? "{}",
-    ) as Partial<TimerDurations>;
+    ) as Partial<TimerSettings>;
+    const repeatCount =
+      typeof parsed.repeatCount === "number" &&
+      Number.isFinite(parsed.repeatCount)
+        ? Math.min(
+            Math.max(Math.floor(parsed.repeatCount), 1),
+            MAX_REPEAT_COUNT,
+          )
+        : DEFAULT_REPEAT_COUNT;
     return {
       focus:
         typeof parsed.focus === "number" && Number.isFinite(parsed.focus)
@@ -178,9 +192,22 @@ function readTimerSettings(): TimerDurations {
         typeof parsed.rest === "number" && Number.isFinite(parsed.rest)
           ? Math.min(Math.max(parsed.rest, 60), 86400)
           : defaultTimerDurations.rest,
+      repeatCount,
+      currentRound:
+        typeof parsed.currentRound === "number" &&
+        Number.isFinite(parsed.currentRound)
+          ? Math.min(
+              Math.max(Math.floor(parsed.currentRound), 1),
+              repeatCount,
+            )
+          : 1,
     };
   } catch {
-    return { ...defaultTimerDurations };
+    return {
+      ...defaultTimerDurations,
+      currentRound: 1,
+      repeatCount: DEFAULT_REPEAT_COUNT,
+    };
   }
 }
 
@@ -292,6 +319,8 @@ export function TodoTimerApp() {
   const [timerDurations, setTimerDurations] = useState<TimerDurations>({
     ...defaultTimerDurations,
   });
+  const [repeatCount, setRepeatCount] = useState(DEFAULT_REPEAT_COUNT);
+  const [currentRound, setCurrentRound] = useState(1);
   const [remainingSeconds, setRemainingSeconds] = useState(
     defaultTimerDurations.focus,
   );
@@ -404,6 +433,60 @@ export function TodoTimerApp() {
     pomodoroChannel.current?.postMessage("pomodoro-changed");
   }, []);
 
+  const startAutomaticSession = useCallback(
+    async (
+      nextMode: TimerMode,
+      nextRound: number,
+      focusTaskId: string | null,
+    ) => {
+      const plannedSeconds = timerDurations[nextMode];
+      setMode(nextMode);
+      setCurrentRound(nextRound);
+      setRemainingSeconds(plannedSeconds);
+      remainingSnapshot.current = plannedSeconds;
+      setIsRunning(false);
+
+      if (nextMode === "focus" && !focusTaskId) {
+        setPomodoroError(
+          "반복 집중을 계속하려면 먼저 할 일을 선택해 주세요.",
+        );
+        return;
+      }
+
+      if (!authUserId) {
+        const nextGuestTimer: GuestTimerSession = {
+          elapsedSeconds: 0,
+          lastResumedAt: Date.now(),
+          mode: nextMode,
+          plannedSeconds,
+          status: "running",
+          taskId: nextMode === "focus" ? focusTaskId : null,
+        };
+        setGuestTimer(nextGuestTimer);
+        setIsRunning(true);
+        return;
+      }
+
+      const started = await startPomodoro({
+        todoId: nextMode === "focus" ? focusTaskId : null,
+        mode: pomodoroModes[nextMode],
+        plannedSeconds,
+      });
+      const startedMode = timerModes[started.mode];
+      const remaining = getPomodoroRemaining(started);
+      setActivePomodoro(started);
+      setMode(startedMode);
+      setRemainingSeconds(remaining);
+      remainingSnapshot.current = remaining;
+      setActiveTaskId((current) =>
+        started.mode === "focus" ? started.todo_id : current,
+      );
+      setIsRunning(started.status === "running");
+      broadcastPomodoroChange();
+    },
+    [authUserId, broadcastPomodoroChange, timerDurations],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -416,7 +499,12 @@ export function TodoTimerApp() {
 
       setGuestTasks(guestData.tasks);
       setGuestCompletedSessions(guestData.sessions);
-      setTimerDurations(settings);
+      setTimerDurations({
+        focus: settings.focus,
+        rest: settings.rest,
+      });
+      setRepeatCount(settings.repeatCount);
+      setCurrentRound(settings.currentRound);
       setGuestTimer(storedTimer);
       setGuestStorageReady(true);
 
@@ -480,9 +568,18 @@ export function TodoTimerApp() {
     if (!guestStorageReady) return;
     window.localStorage.setItem(
       TIMER_SETTINGS_KEY,
-      JSON.stringify(timerDurations),
+      JSON.stringify({
+        ...timerDurations,
+        currentRound,
+        repeatCount,
+      }),
     );
-  }, [guestStorageReady, timerDurations]);
+  }, [
+    currentRound,
+    guestStorageReady,
+    repeatCount,
+    timerDurations,
+  ]);
 
   useEffect(() => {
     function handleBeforeInstallPrompt(event: Event) {
@@ -548,6 +645,8 @@ export function TodoTimerApp() {
         setPomodoroLoadedForUser(null);
         setPomodoroError(null);
         setPomodoroPending(false);
+        setRepeatCount(storedTimerSettings.repeatCount);
+        setCurrentRound(storedTimerSettings.currentRound);
 
         if (storedGuestTimer) {
           const elapsed = getGuestTimerElapsed(storedGuestTimer);
@@ -828,7 +927,7 @@ export function TodoTimerApp() {
             currentPomodoro.id,
             currentPomodoro.planned_seconds,
           )
-            .then((completed) => {
+            .then(async (completed) => {
               setActivePomodoro(null);
               broadcastPomodoroChange();
 
@@ -846,6 +945,30 @@ export function TodoTimerApp() {
                   sessions: current.sessions + 1,
                 }));
               }
+
+              const completedMode = timerModes[completed.mode];
+              const shouldContinue =
+                completedMode === "rest" || currentRound < repeatCount;
+
+              if (shouldContinue) {
+                const nextMode =
+                  completedMode === "focus" ? "rest" : "focus";
+                const nextRound =
+                  completedMode === "rest"
+                    ? Math.min(currentRound + 1, repeatCount)
+                    : currentRound;
+                await startAutomaticSession(
+                  nextMode,
+                  nextRound,
+                  completed.todo_id ?? activeTaskId,
+                );
+                return;
+              }
+
+              setMode("focus");
+              setCurrentRound(1);
+              setRemainingSeconds(timerDurations.focus);
+              remainingSnapshot.current = timerDurations.focus;
             })
             .catch((error: unknown) => {
               setPomodoroError(getAuthErrorMessage(error));
@@ -855,27 +978,48 @@ export function TodoTimerApp() {
             });
         } else {
           setGuestTimer(null);
-        }
 
-        if (!authUserId && mode === "focus" && activeTaskId !== null) {
-          const elapsedSeconds =
-            guestTimer?.plannedSeconds ?? timerDurations.focus;
-          updateVisibleTasks((current) =>
-            current.map((task) =>
-              task.id === activeTaskId
-                ? { ...task, pomodoros: task.pomodoros + 1 }
-                : task,
+          if (mode === "focus" && activeTaskId !== null) {
+            const elapsedSeconds =
+              guestTimer?.plannedSeconds ?? timerDurations.focus;
+            updateVisibleTasks((current) =>
+              current.map((task) =>
+                task.id === activeTaskId
+                  ? { ...task, pomodoros: task.pomodoros + 1 }
+                  : task,
               ),
-          );
-          setGuestCompletedSessions((current) => [
-            ...current,
-            {
-              id: window.crypto.randomUUID(),
-              elapsedSeconds,
-              endedAt: new Date().toISOString(),
-              taskId: activeTaskId,
-            },
-          ]);
+            );
+            setGuestCompletedSessions((current) => [
+              ...current,
+              {
+                id: window.crypto.randomUUID(),
+                elapsedSeconds,
+                endedAt: new Date().toISOString(),
+                taskId: activeTaskId,
+              },
+            ]);
+          }
+
+          const shouldContinue =
+            mode === "rest" || currentRound < repeatCount;
+
+          if (shouldContinue) {
+            const nextMode = mode === "focus" ? "rest" : "focus";
+            const nextRound =
+              mode === "rest"
+                ? Math.min(currentRound + 1, repeatCount)
+                : currentRound;
+            void startAutomaticSession(
+              nextMode,
+              nextRound,
+              activeTaskId,
+            );
+          } else {
+            setMode("focus");
+            setCurrentRound(1);
+            setRemainingSeconds(timerDurations.focus);
+            remainingSnapshot.current = timerDurations.focus;
+          }
         }
       }
     }, 250);
@@ -885,10 +1029,13 @@ export function TodoTimerApp() {
     activeTaskId,
     authUserId,
     broadcastPomodoroChange,
+    currentRound,
     currentPomodoro,
     guestTimer,
     isRunning,
     mode,
+    repeatCount,
+    startAutomaticSession,
     timerDurations.focus,
     updateVisibleTasks,
   ]);
@@ -901,9 +1048,21 @@ export function TodoTimerApp() {
   function handleModeChange(nextMode: TimerMode) {
     if (hasActiveTimerSession || pomodoroPending) return;
     setMode(nextMode);
+    setCurrentRound(1);
     setRemainingSeconds(timerDurations[nextMode]);
     remainingSnapshot.current = timerDurations[nextMode];
     setIsRunning(false);
+  }
+
+  function handleRepeatCountChange(count: number) {
+    if (hasActiveTimerSession || pomodoroPending) return;
+
+    const safeCount = Math.min(
+      Math.max(Math.floor(count), 1),
+      MAX_REPEAT_COUNT,
+    );
+    setRepeatCount(safeCount);
+    setCurrentRound(1);
   }
 
   function handleDurationChange(seconds: number) {
@@ -1251,12 +1410,14 @@ export function TodoTimerApp() {
 
     if (!authUserId) {
       setGuestTimer(null);
+      setCurrentRound(1);
       setRemainingSeconds(timerDurations[mode]);
       remainingSnapshot.current = timerDurations[mode];
       return;
     }
 
     if (!currentPomodoro) {
+      setCurrentRound(1);
       setRemainingSeconds(timerDurations[mode]);
       remainingSnapshot.current = timerDurations[mode];
       return;
@@ -1268,6 +1429,7 @@ export function TodoTimerApp() {
     try {
       await cancelPomodoro(currentPomodoro.id, elapsedSeconds);
       setActivePomodoro(null);
+      setCurrentRound(1);
       setRemainingSeconds(timerDurations[mode]);
       remainingSnapshot.current = timerDurations[mode];
       broadcastPomodoroChange();
@@ -1283,6 +1445,10 @@ export function TodoTimerApp() {
 
     const nextMode: TimerMode = mode === "focus" ? "rest" : "focus";
     const nextDuration = timerDurations[nextMode];
+    const nextRound =
+      mode === "rest"
+        ? Math.min(currentRound + 1, repeatCount)
+        : currentRound;
     const wasRunning = isRunning;
     setPomodoroError(null);
 
@@ -1290,6 +1456,7 @@ export function TodoTimerApp() {
       setIsRunning(false);
       setGuestTimer(null);
       setMode(nextMode);
+      setCurrentRound(nextRound);
       setRemainingSeconds(nextDuration);
       remainingSnapshot.current = nextDuration;
       return;
@@ -1298,6 +1465,7 @@ export function TodoTimerApp() {
     if (!currentPomodoro) {
       setIsRunning(false);
       setMode(nextMode);
+      setCurrentRound(nextRound);
       setRemainingSeconds(nextDuration);
       remainingSnapshot.current = nextDuration;
       return;
@@ -1313,6 +1481,7 @@ export function TodoTimerApp() {
       );
       setActivePomodoro(null);
       setMode(nextMode);
+      setCurrentRound(nextRound);
       setRemainingSeconds(nextDuration);
       remainingSnapshot.current = nextDuration;
       broadcastPomodoroChange();
@@ -1335,6 +1504,7 @@ export function TodoTimerApp() {
     if (hasActiveTimerSession && id !== activeTaskId) return;
     setActiveTaskId(id);
     setMode("focus");
+    setCurrentRound(1);
     setRemainingSeconds(timerDurations.focus);
     remainingSnapshot.current = timerDurations.focus;
     setIsRunning(false);
@@ -1512,6 +1682,8 @@ export function TodoTimerApp() {
             isPending={pomodoroPending || pomodoroLoading}
             mode={mode}
             remainingSeconds={remainingSeconds}
+            repeatCount={repeatCount}
+            currentRound={currentRound}
             totalSeconds={
               currentPomodoro?.planned_seconds ??
               guestTimer?.plannedSeconds ??
@@ -1522,6 +1694,7 @@ export function TodoTimerApp() {
             isRunning={isRunning}
             onDurationChange={handleDurationChange}
             onModeChange={handleModeChange}
+            onRepeatCountChange={handleRepeatCountChange}
             onRetry={handleRetryPomodoro}
             onSkip={handleSkipTimer}
             onToggleRunning={handleToggleTimer}

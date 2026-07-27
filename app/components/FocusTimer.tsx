@@ -3,9 +3,14 @@ import type { Task, TimerMode } from "../types";
 
 type FocusTimerProps = {
   activeTask: Task | undefined;
+  error: string | null;
+  hasActiveSession: boolean;
+  isPending: boolean;
   mode: TimerMode;
   remainingSeconds: number;
   totalSeconds: number;
+  todayCompletedSessions: number;
+  todayFocusSeconds: number;
   isRunning: boolean;
   onModeChange: (mode: TimerMode) => void;
   onToggleRunning: () => void;
@@ -24,11 +29,26 @@ function formatTime(value: number) {
   return `${minutes}:${seconds}`;
 }
 
+function formatDuration(value: number) {
+  const totalMinutes = Math.floor(value / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours === 0) return `${minutes}분`;
+  if (minutes === 0) return `${hours}시간`;
+  return `${hours}시간 ${minutes}분`;
+}
+
 export function FocusTimer({
   activeTask,
+  error,
+  hasActiveSession,
+  isPending,
   mode,
   remainingSeconds,
   totalSeconds,
+  todayCompletedSessions,
+  todayFocusSeconds,
   isRunning,
   onModeChange,
   onToggleRunning,
@@ -55,7 +75,7 @@ export function FocusTimer({
               type="button"
               key={key}
               onClick={() => onModeChange(key)}
-              disabled={isRunning}
+              disabled={isRunning || hasActiveSession || isPending}
             >
               {modeLabels[key]}
             </button>
@@ -66,7 +86,15 @@ export function FocusTimer({
           <div className="timer-face">
             <span>{mode === "focus" ? "FOCUS" : "BREAK"}</span>
             <strong>{formatTime(remainingSeconds)}</strong>
-            <small>{isRunning ? "집중하고 있어요" : "준비되면 시작하세요"}</small>
+            <small>
+              {isPending
+                ? "기록을 저장하고 있어요"
+                : isRunning
+                  ? "집중하고 있어요"
+                  : hasActiveSession
+                    ? "일시정지됨"
+                    : "준비되면 시작하세요"}
+            </small>
           </div>
         </div>
 
@@ -76,28 +104,56 @@ export function FocusTimer({
         </div>
 
         <div className="timer-actions">
-          <button className="reset-button" type="button" onClick={onReset} aria-label="타이머 초기화">↺</button>
+          <button
+            className="reset-button"
+            type="button"
+            onClick={onReset}
+            disabled={isPending}
+            aria-label={hasActiveSession ? "실행 중인 세션 취소" : "타이머 초기화"}
+          >
+            ↺
+          </button>
           <button
             className="start-button"
             type="button"
             onClick={onToggleRunning}
-            disabled={!activeTask && mode === "focus"}
+            disabled={
+              isPending ||
+              (!activeTask && mode === "focus" && !hasActiveSession)
+            }
           >
             <span aria-hidden="true">{isRunning ? "Ⅱ" : "▶"}</span>
-            {isRunning ? "잠시 멈춤" : "집중 시작"}
+            {isPending
+              ? "저장 중…"
+              : isRunning
+                ? "잠시 멈춤"
+                : hasActiveSession
+                  ? "계속하기"
+                  : mode === "focus"
+                    ? "집중 시작"
+                    : "휴식 시작"}
           </button>
-          <button className="sound-button" type="button" aria-label="타이머 소리 켜기">♪</button>
+          <button
+            className="sound-button"
+            type="button"
+            aria-label="타이머 소리 켜기"
+            disabled={isPending}
+          >
+            ♪
+          </button>
         </div>
+
+        {error && <p className="timer-error" role="alert">{error}</p>}
       </section>
 
       <div className="focus-summary">
         <div>
           <span>오늘 집중</span>
-          <strong>1시간 15분</strong>
+          <strong>{formatDuration(todayFocusSeconds)}</strong>
         </div>
         <div>
           <span>완료 세션</span>
-          <strong>3회</strong>
+          <strong>{todayCompletedSessions}회</strong>
         </div>
       </div>
 

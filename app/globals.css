@@ -488,6 +488,11 @@ input:focus-visible {
   color: #a8aea9;
 }
 
+.task-composer input:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
 .task-composer button {
   height: 34px;
   padding: 0 15px;
@@ -502,6 +507,11 @@ input:focus-visible {
 
 .task-composer button:hover {
   background: #22634f;
+}
+
+.task-composer button:disabled {
+  cursor: wait;
+  opacity: 0.62;
 }
 
 .task-section-heading {
@@ -529,9 +539,43 @@ input:focus-visible {
   gap: 7px;
 }
 
+.task-state {
+  display: flex;
+  min-height: 90px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.46);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.task-state.is-error {
+  border-color: #e5b8af;
+  background: #fff3f0;
+  color: #8a3328;
+}
+
+.task-state button {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #8a3328;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .task-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 11px;
   min-height: 67px;
@@ -555,6 +599,10 @@ input:focus-visible {
 .task-item.is-complete {
   background: transparent;
   opacity: 0.58;
+}
+
+.task-item.is-editing {
+  opacity: 1;
 }
 
 .task-check-wrap {
@@ -613,6 +661,66 @@ input:focus-visible {
   align-items: center;
   color: var(--muted);
   font-size: 9px;
+}
+
+.task-edit-form {
+  display: grid;
+  grid-column: 2 / -1;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.task-edit-form input {
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: 0;
+  background: #fff;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.task-edit-form input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(23, 78, 62, 0.1);
+}
+
+.task-edit-form button,
+.task-row-actions button {
+  height: 29px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.task-edit-form button:disabled,
+.task-row-actions button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.task-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-row-actions button:hover:not(:disabled) {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.task-row-actions button.is-danger:hover:not(:disabled) {
+  border-color: #c87969;
+  color: #9a3e32;
 }
 
 .task-item.is-complete .task-copy strong {
@@ -834,6 +942,11 @@ input:focus-visible {
   cursor: pointer;
 }
 
+.timer-actions button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .reset-button,
 .sound-button {
   background: rgba(255, 255, 255, 0.43);
@@ -864,6 +977,14 @@ input:focus-visible {
 .start-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.timer-error {
+  margin: 10px 2px 0;
+  color: #8a3328;
+  font-size: 9px;
+  line-height: 1.45;
+  text-align: center;
 }
 
 .focus-summary {
@@ -1038,6 +1159,11 @@ input:focus-visible {
 
   .task-item {
     grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .task-edit-form,
+  .task-row-actions {
+    grid-column: 2;
   }
 
   .focus-task-button {

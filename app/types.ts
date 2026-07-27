@@ -1,7 +1,7 @@
 export type TaskLabel = "업무" | "개인" | "건강";
 
 export type Task = {
-  id: number;
+  id: string;
   title: string;
   label: TaskLabel;
   estimate: number;

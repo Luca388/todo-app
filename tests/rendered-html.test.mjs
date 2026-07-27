@@ -59,3 +59,51 @@ test("wires the Supabase auth lifecycle to desktop and mobile controls", async (
   assert.match(sidebar, /onClick=\{onAuthAction\}/);
   assert.match(sidebar, /disabled=\{authDisabled\}/);
 });
+
+test("wires authenticated todos to Supabase with visible request states", async () => {
+  const [app, taskList] = await Promise.all([
+    readFile(
+      new URL("../app/components/TodoTimerApp.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/components/TaskList.tsx", import.meta.url),
+      "utf8",
+    ),
+  ]);
+
+  assert.match(app, /listTodos\(\)/);
+  assert.match(app, /await createTodo\(/);
+  assert.match(app, /await setTodoCompleted\(/);
+  assert.match(app, /await updateTodo\(/);
+  assert.match(app, /await deleteTodo\(/);
+  assert.match(app, /todos\.map\(todoRowToTask\)/);
+  assert.match(taskList, /Supabase에서 할 일을 불러오고 있어요/);
+  assert.match(taskList, /아직 할 일이 없어요/);
+  assert.match(taskList, /다시 시도/);
+  assert.match(taskList, /할 일 제목 수정/);
+  assert.match(taskList, /이 작업은 되돌릴 수 없습니다/);
+});
+
+test("persists and restores the Pomodoro session lifecycle", async () => {
+  const [app, timer] = await Promise.all([
+    readFile(
+      new URL("../app/components/TodoTimerApp.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/components/FocusTimer.tsx", import.meta.url),
+      "utf8",
+    ),
+  ]);
+
+  assert.match(app, /getRunningPomodoro\(\)/);
+  assert.match(app, /listRecentPomodoros\(100\)/);
+  assert.match(app, /await startPomodoro\(/);
+  assert.match(app, /completePomodoro\(/);
+  assert.match(app, /await cancelPomodoro\(/);
+  assert.match(timer, /일시정지됨/);
+  assert.match(timer, /실행 중인 세션 취소/);
+  assert.match(timer, /todayCompletedSessions/);
+  assert.match(timer, /todayFocusSeconds/);
+});

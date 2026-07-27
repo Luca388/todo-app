@@ -1278,6 +1278,53 @@ export function TodoTimerApp() {
     }
   }
 
+  async function handleSkipTimer() {
+    if (pomodoroPending || pomodoroLoading) return;
+
+    const nextMode: TimerMode = mode === "focus" ? "rest" : "focus";
+    const nextDuration = timerDurations[nextMode];
+    const wasRunning = isRunning;
+    setPomodoroError(null);
+
+    if (!authUserId) {
+      setIsRunning(false);
+      setGuestTimer(null);
+      setMode(nextMode);
+      setRemainingSeconds(nextDuration);
+      remainingSnapshot.current = nextDuration;
+      return;
+    }
+
+    if (!currentPomodoro) {
+      setIsRunning(false);
+      setMode(nextMode);
+      setRemainingSeconds(nextDuration);
+      remainingSnapshot.current = nextDuration;
+      return;
+    }
+
+    setIsRunning(false);
+    setPomodoroPending(true);
+
+    try {
+      await cancelPomodoro(
+        currentPomodoro.id,
+        getPomodoroElapsed(currentPomodoro),
+      );
+      setActivePomodoro(null);
+      setMode(nextMode);
+      setRemainingSeconds(nextDuration);
+      remainingSnapshot.current = nextDuration;
+      broadcastPomodoroChange();
+    } catch (error) {
+      remainingSnapshot.current = remainingSeconds;
+      setIsRunning(wasRunning);
+      setPomodoroError(getAuthErrorMessage(error));
+    } finally {
+      setPomodoroPending(false);
+    }
+  }
+
   function handleRetryPomodoro() {
     setPomodoroError(null);
     setPomodoroLoadedForUser(null);
@@ -1476,6 +1523,7 @@ export function TodoTimerApp() {
             onDurationChange={handleDurationChange}
             onModeChange={handleModeChange}
             onRetry={handleRetryPomodoro}
+            onSkip={handleSkipTimer}
             onToggleRunning={handleToggleTimer}
             onReset={handleResetTimer}
           />

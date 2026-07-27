@@ -944,7 +944,7 @@ button {
 
 .timer-actions {
   display: grid;
-  grid-template-columns: minmax(112px, 0.62fr) minmax(0, 1.38fr);
+  grid-template-columns: minmax(76px, 0.62fr) minmax(0, 1.38fr) minmax(76px, 0.62fr);
   gap: 8px;
   margin-top: 10px;
 }
@@ -994,6 +994,28 @@ button {
 
 .start-button:hover:not(:disabled) {
   background: var(--forest-2);
+}
+
+.skip-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: #fff;
+  color: var(--text-soft);
+  box-shadow: inset 0 0 0 1px rgba(21, 63, 51, 0.12);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.skip-button span {
+  color: var(--forest);
+  font-size: 13px;
+}
+
+.skip-button:hover:not(:disabled) {
+  color: var(--forest);
+  background: #f6f9f7;
 }
 
 .timer-error {
@@ -1199,7 +1221,7 @@ button {
   }
 
   .timer-actions {
-    grid-template-columns: minmax(96px, 0.72fr) minmax(0, 1.28fr);
+    grid-template-columns: minmax(70px, 0.62fr) minmax(0, 1.38fr) minmax(70px, 0.62fr);
   }
 }
 

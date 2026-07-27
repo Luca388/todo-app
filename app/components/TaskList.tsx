@@ -43,7 +43,13 @@ export function TaskList({
   const [filter, setFilter] = useState<"all" | "active" | "completed">("all");
   const remaining = tasks.filter((task) => !task.completed).length;
   const completed = tasks.length - remaining;
-  const visibleTasks = tasks.filter((task) => {
+  const orderedTasks =
+    filter === "all"
+      ? [...tasks].sort(
+          (left, right) => Number(left.completed) - Number(right.completed),
+        )
+      : tasks;
+  const visibleTasks = orderedTasks.filter((task) => {
     if (filter === "active") return !task.completed;
     if (filter === "completed") return task.completed;
     return true;
@@ -217,7 +223,11 @@ export function TaskList({
                     className="task-copy"
                     type="button"
                     onClick={() => onSelectTask(task.id)}
-                    disabled={isPending || (focusLocked && !isActive)}
+                    disabled={
+                      task.completed ||
+                      isPending ||
+                      (focusLocked && !isActive)
+                    }
                   >
                     <strong>{task.title}</strong>
                     <span>

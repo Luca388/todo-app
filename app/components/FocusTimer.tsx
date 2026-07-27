@@ -20,6 +20,7 @@ type FocusTimerProps = {
   onDurationChange: (seconds: number) => void;
   onModeChange: (mode: TimerMode) => void;
   onRetry: () => void;
+  onSkip: () => void;
   onToggleRunning: () => void;
   onReset: () => void;
 };
@@ -59,6 +60,7 @@ export function FocusTimer({
   onDurationChange,
   onModeChange,
   onRetry,
+  onSkip,
   onToggleRunning,
   onReset,
 }: FocusTimerProps) {
@@ -201,7 +203,7 @@ export function FocusTimer({
             aria-label={hasActiveSession ? "실행 중인 세션 취소" : "타이머 초기화"}
           >
             <span aria-hidden="true">↺</span>
-            {hasActiveSession ? "세션 취소" : "초기화"}
+            {hasActiveSession ? "취소" : "초기화"}
           </button>
           <button
             className="start-button"
@@ -225,6 +227,19 @@ export function FocusTimer({
                 : mode === "focus"
                   ? "집중 시작"
                   : "휴식 시작"}
+          </button>
+          <button
+            className="skip-button"
+            type="button"
+            onClick={() => {
+              setIsEditingDuration(false);
+              onSkip();
+            }}
+            disabled={isPending}
+            aria-label={`${mode === "focus" ? "휴식" : "집중"} 모드로 건너뛰기`}
+          >
+            건너뛰기
+            <span aria-hidden="true">→</span>
           </button>
         </div>
 

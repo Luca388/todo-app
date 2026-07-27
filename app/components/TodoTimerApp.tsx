@@ -1291,6 +1291,18 @@ export function TodoTimerApp() {
     setRemainingSeconds(timerDurations.focus);
     remainingSnapshot.current = timerDurations.focus;
     setIsRunning(false);
+
+    if (window.matchMedia("(max-width: 980px)").matches) {
+      window.requestAnimationFrame(() => {
+        document.querySelector(".focus-column")?.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
+            .matches
+            ? "auto"
+            : "smooth",
+          block: "start",
+        });
+      });
+    }
   }
 
   async function handleInstallApp() {
@@ -1366,35 +1378,36 @@ export function TodoTimerApp() {
       />
 
       <div className="workspace">
-        <header className="mobile-header">
-          <div className="brand mobile-brand">
-            <span className="brand-mark" aria-hidden="true">●</span>
-            <span>하루</span>
+        <section className="dashboard-intro" aria-labelledby="dashboard-title">
+          <div className="intro-copy">
+            <p className="eyebrow">TODAY</p>
+            <h1 id="dashboard-title">할 일과 집중 타이머</h1>
+            <p>
+              할 일을 고르고, 시간을 정한 뒤 바로 시작할 수 있습니다.
+            </p>
           </div>
-          <div className="mobile-header-actions">
-            <button
-              className="mobile-auth-button"
-              type="button"
-              onClick={handleAuthAction}
-              disabled={!supabaseConfigured || !authReady || authPending}
-            >
-              {authPending ? "처리 중…" : authUser ? "로그아웃" : "Google 로그인"}
-            </button>
-            <button className="mobile-menu" type="button" aria-label="메뉴 열기">☰</button>
-          </div>
-        </header>
 
-        <div className="top-actions">
-          <div className="daily-progress" aria-label={`오늘 할 일 ${progressPercent}% 완료`}>
-            <span>오늘의 진행률</span>
-            <div className="progress-track"><span style={{ width: `${progressPercent}%` }} /></div>
-            <strong>{progressPercent}%</strong>
+          <div className="intro-actions">
+            <div
+              className="daily-progress"
+              aria-label={`오늘 할 일 ${progressPercent}% 완료`}
+            >
+              <span>오늘의 진행률</span>
+              <strong>{progressPercent}%</strong>
+              <div className="progress-track">
+                <span style={{ width: `${progressPercent}%` }} />
+              </div>
+            </div>
+            <button
+              className="install-button"
+              type="button"
+              onClick={handleInstallApp}
+            >
+              <span aria-hidden="true">⇩</span>
+              앱 설치
+            </button>
           </div>
-          <button className="install-button" type="button" onClick={handleInstallApp}>
-            <span aria-hidden="true">⇩</span> 앱으로 설치
-          </button>
-          <button className="notification-button" type="button" aria-label="알림">♢</button>
-        </div>
+        </section>
 
         {installMessage && (
           <div className="install-preview" role="status">

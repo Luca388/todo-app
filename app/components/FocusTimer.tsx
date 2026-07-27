@@ -96,11 +96,24 @@ export function FocusTimer({
 
   return (
     <aside className="focus-column" aria-labelledby="focus-title">
-      <div className="focus-topbar">
-        <span className="live-dot" aria-hidden="true" />
-        <span>집중 공간</span>
-        <button type="button" aria-label="집중 설정">•••</button>
-      </div>
+      <header className="focus-heading">
+        <div>
+          <p className="eyebrow">TIMER</p>
+          <h2 id="focus-title">집중 타이머</h2>
+        </div>
+        <span
+          className={`timer-status ${isRunning ? "is-running" : ""}`}
+        >
+          <span aria-hidden="true" />
+          {isPending
+            ? "저장 중"
+            : isRunning
+              ? "진행 중"
+              : hasActiveSession
+                ? "일시정지"
+                : "준비"}
+        </span>
+      </header>
 
       <section className="timer-card">
         <div className="mode-tabs" aria-label="타이머 모드">
@@ -122,7 +135,7 @@ export function FocusTimer({
 
         <div className="timer-ring" style={timerStyle}>
           <div className="timer-face">
-            <span>{mode === "focus" ? "FOCUS" : "BREAK"}</span>
+            <span>{mode === "focus" ? "집중" : "휴식"}</span>
             {showDurationEditor ? (
               <form
                 className="timer-duration-editor"
@@ -168,8 +181,12 @@ export function FocusTimer({
         </div>
 
         <div className="timer-task">
-          <span>지금 집중할 일</span>
-          <strong>{activeTask?.title ?? "목록에서 할 일을 선택하세요"}</strong>
+          <span>{mode === "focus" ? "선택한 할 일" : "현재 모드"}</span>
+          <strong>
+            {mode === "focus"
+              ? (activeTask?.title ?? "목록에서 할 일을 선택하세요")
+              : "잠시 쉬어가기"}
+          </strong>
         </div>
 
         <div className="timer-actions">
@@ -183,7 +200,8 @@ export function FocusTimer({
             disabled={isPending}
             aria-label={hasActiveSession ? "실행 중인 세션 취소" : "타이머 초기화"}
           >
-            ↺
+            <span aria-hidden="true">↺</span>
+            {hasActiveSession ? "세션 취소" : "초기화"}
           </button>
           <button
             className="start-button"
@@ -204,17 +222,9 @@ export function FocusTimer({
                 ? "잠시 멈춤"
                 : hasActiveSession
                   ? "계속하기"
-                  : mode === "focus"
-                    ? "집중 시작"
-                    : "휴식 시작"}
-          </button>
-          <button
-            className="sound-button"
-            type="button"
-            aria-label="타이머 소리 켜기"
-            disabled={isPending}
-          >
-            ♪
+                : mode === "focus"
+                  ? "집중 시작"
+                  : "휴식 시작"}
           </button>
         </div>
 

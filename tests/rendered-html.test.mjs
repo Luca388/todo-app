@@ -34,8 +34,9 @@ test("server-renders the Haru app and authentication entry points", async () => 
   assert.match(html, /class="app-shell"/);
   assert.match(html, /오늘 할 일/);
   assert.match(html, /게스트 모드/);
-  assert.match(html, /Google 로그인/);
   assert.match(html, /로그인 확인 중…/);
+  assert.match(html, /할 일과 집중 타이머/);
+  assert.match(html, /집중 타이머/);
 });
 
 test("wires the Supabase auth lifecycle to desktop and mobile controls", async () => {
@@ -55,7 +56,8 @@ test("wires the Supabase auth lifecycle to desktop and mobile controls", async (
   assert.match(app, /subscription\.unsubscribe\(\)/);
   assert.match(app, /await signInWithGoogle\(\)/);
   assert.match(app, /await signOut\(\)/);
-  assert.match(app, /className="mobile-auth-button"/);
+  assert.match(app, /className="dashboard-intro"/);
+  assert.match(sidebar, /className="app-header"/);
   assert.match(sidebar, /onClick=\{onAuthAction\}/);
   assert.match(sidebar, /disabled=\{authDisabled\}/);
 });
@@ -84,6 +86,8 @@ test("wires authenticated todos to Supabase with visible request states", async 
   assert.match(taskList, /Supabase에서 할 일을 불러오고 있어요/);
   assert.match(taskList, /아직 할 일이 없어요/);
   assert.match(taskList, /다시 시도/);
+  assert.match(taskList, /setFilter\("active"\)/);
+  assert.match(taskList, /setFilter\("completed"\)/);
   assert.match(taskList, /할 일 제목 수정/);
   assert.match(taskList, /이 작업은 되돌릴 수 없습니다/);
 });

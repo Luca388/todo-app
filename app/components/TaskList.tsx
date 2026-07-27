@@ -40,7 +40,14 @@ export function TaskList({
 }: TaskListProps) {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
+  const [filter, setFilter] = useState<"all" | "active" | "completed">("all");
   const remaining = tasks.filter((task) => !task.completed).length;
+  const completed = tasks.length - remaining;
+  const visibleTasks = tasks.filter((task) => {
+    if (filter === "active") return !task.completed;
+    if (filter === "completed") return task.completed;
+    return true;
+  });
 
   async function handleRenameSubmit(
     event: FormEvent<HTMLFormElement>,
@@ -71,9 +78,11 @@ export function TaskList({
     <section className="tasks-panel" aria-labelledby="today-title">
       <header className="content-heading">
         <div>
-          <p className="eyebrow">7월 18일 토요일</p>
-          <h1 id="today-title">오늘 할 일</h1>
-          <p className="heading-note">가장 중요한 일 하나부터 시작해 보세요.</p>
+          <p className="eyebrow">TASKS</p>
+          <h2 id="today-title">할 일</h2>
+          <p className="heading-note">
+            할 일을 선택하면 집중 타이머에 바로 연결됩니다.
+          </p>
         </div>
         <span className="remaining-pill">{remaining}개 남음</span>
       </header>
@@ -95,8 +104,29 @@ export function TaskList({
       </form>
 
       <div className="task-section-heading">
-        <h2>오늘의 목록</h2>
-        <button type="button">정렬 <span aria-hidden="true">⌄</span></button>
+        <div className="task-filters" aria-label="할 일 필터">
+          <button
+            className={filter === "all" ? "is-active" : ""}
+            type="button"
+            onClick={() => setFilter("all")}
+          >
+            전체 <span>{tasks.length}</span>
+          </button>
+          <button
+            className={filter === "active" ? "is-active" : ""}
+            type="button"
+            onClick={() => setFilter("active")}
+          >
+            진행 중 <span>{remaining}</span>
+          </button>
+          <button
+            className={filter === "completed" ? "is-active" : ""}
+            type="button"
+            onClick={() => setFilter("completed")}
+          >
+            완료 <span>{completed}</span>
+          </button>
+        </div>
       </div>
 
       <div className="task-list">
@@ -119,7 +149,16 @@ export function TaskList({
           </div>
         )}
 
-        {tasks.map((task) => {
+        {!isLoading &&
+          !error &&
+          tasks.length > 0 &&
+          visibleTasks.length === 0 && (
+            <div className="task-state">
+              이 필터에 표시할 할 일이 없습니다.
+            </div>
+          )}
+
+        {visibleTasks.map((task) => {
           const isActive = activeTaskId === task.id;
           const isPending = pendingTaskIds.has(task.id);
           const isEditing = editingTaskId === task.id;
@@ -217,7 +256,11 @@ export function TaskList({
                     disabled={task.completed || isPending || focusLocked}
                     aria-label={`${task.title} 집중 대상으로 선택`}
                   >
-                    {isActive ? "집중 중" : "집중"}
+                    {isActive
+                      ? focusLocked
+                        ? "집중 중"
+                        : "선택됨"
+                      : "집중"}
                     <span aria-hidden="true">{isActive ? "●" : "▶"}</span>
                   </button>
                 </>
@@ -226,11 +269,6 @@ export function TaskList({
           );
         })}
       </div>
-
-      <button className="show-completed" type="button">
-        완료한 일 {tasks.filter((task) => task.completed).length}개
-        <span aria-hidden="true">⌄</span>
-      </button>
     </section>
   );
 }

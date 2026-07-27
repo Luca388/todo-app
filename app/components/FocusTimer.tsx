@@ -8,22 +8,34 @@ import type { Task, TimerMode } from "../types";
 
 type FocusTimerProps = {
   activeTask: Task | undefined;
+  autoStartFocus: boolean;
+  autoStartRest: boolean;
+  browserNotificationsEnabled: boolean;
+  browserNotificationsSupported: boolean;
   error: string | null;
   hasActiveSession: boolean;
   isPending: boolean;
   mode: TimerMode;
+  notificationMessage: string | null;
   remainingSeconds: number;
   repeatCount: number;
+  soundEnabled: boolean;
   currentRound: number;
   totalSeconds: number;
   todayCompletedSessions: number;
   todayFocusSeconds: number;
   isRunning: boolean;
+  onAutoStartFocusChange: (enabled: boolean) => void;
+  onAutoStartRestChange: (enabled: boolean) => void;
+  onBrowserNotificationsEnabledChange: (
+    enabled: boolean,
+  ) => void | Promise<void>;
   onDurationChange: (seconds: number) => void;
   onModeChange: (mode: TimerMode) => void;
   onRepeatCountChange: (count: number) => void;
   onRetry: () => void;
   onSkip: () => void;
+  onSoundEnabledChange: (enabled: boolean) => void;
   onToggleRunning: () => void;
   onReset: () => void;
 };
@@ -51,22 +63,32 @@ function formatDuration(value: number) {
 
 export function FocusTimer({
   activeTask,
+  autoStartFocus,
+  autoStartRest,
+  browserNotificationsEnabled,
+  browserNotificationsSupported,
   error,
   hasActiveSession,
   isPending,
   mode,
+  notificationMessage,
   remainingSeconds,
   repeatCount,
+  soundEnabled,
   currentRound,
   totalSeconds,
   todayCompletedSessions,
   todayFocusSeconds,
   isRunning,
+  onAutoStartFocusChange,
+  onAutoStartRestChange,
+  onBrowserNotificationsEnabledChange,
   onDurationChange,
   onModeChange,
   onRepeatCountChange,
   onRetry,
   onSkip,
+  onSoundEnabledChange,
   onToggleRunning,
   onReset,
 }: FocusTimerProps) {
@@ -169,6 +191,85 @@ export function FocusTimer({
           </div>
         </div>
 
+        <div className="timer-preferences">
+          <section className="preference-group" aria-labelledby="alerts-title">
+            <div>
+              <strong id="alerts-title">알림</strong>
+              <small>종료와 자동 시작을 알려드려요</small>
+            </div>
+            <div className="preference-toggles">
+              <button
+                className={soundEnabled ? "is-active" : ""}
+                type="button"
+                role="switch"
+                aria-checked={soundEnabled}
+                onClick={() => onSoundEnabledChange(!soundEnabled)}
+              >
+                <span aria-hidden="true" />
+                소리
+              </button>
+              <button
+                className={browserNotificationsEnabled ? "is-active" : ""}
+                type="button"
+                role="switch"
+                aria-checked={browserNotificationsEnabled}
+                onClick={() =>
+                  void onBrowserNotificationsEnabledChange(
+                    !browserNotificationsEnabled,
+                  )
+                }
+                disabled={!browserNotificationsSupported}
+                title={
+                  browserNotificationsSupported
+                    ? undefined
+                    : "이 브라우저에서는 알림을 사용할 수 없습니다"
+                }
+              >
+                <span aria-hidden="true" />
+                브라우저
+              </button>
+            </div>
+          </section>
+
+          <section
+            className="preference-group"
+            aria-labelledby="auto-start-title"
+          >
+            <div>
+              <strong id="auto-start-title">자동 시작</strong>
+              <small>끄면 다음 단계에서 확인 후 시작해요</small>
+            </div>
+            <div className="preference-toggles">
+              <button
+                className={autoStartRest ? "is-active" : ""}
+                type="button"
+                role="switch"
+                aria-checked={autoStartRest}
+                onClick={() => onAutoStartRestChange(!autoStartRest)}
+              >
+                <span aria-hidden="true" />
+                휴식
+              </button>
+              <button
+                className={autoStartFocus ? "is-active" : ""}
+                type="button"
+                role="switch"
+                aria-checked={autoStartFocus}
+                onClick={() => onAutoStartFocusChange(!autoStartFocus)}
+              >
+                <span aria-hidden="true" />
+                다음 집중
+              </button>
+            </div>
+          </section>
+        </div>
+
+        {notificationMessage && (
+          <p className="preference-message" role="status">
+            {notificationMessage}
+          </p>
+        )}
+
         <div className="timer-ring" style={timerStyle}>
           <div className="timer-face">
             <span>{mode === "focus" ? "집중" : "휴식"}</span>
@@ -208,7 +309,9 @@ export function FocusTimer({
               {isPending
                 ? "기록을 저장하고 있어요"
                 : isRunning
-                  ? "집중하고 있어요"
+                  ? mode === "focus"
+                    ? "집중하고 있어요"
+                    : "쉬고 있어요"
                   : hasActiveSession
                     ? "일시정지됨"
                     : "시간을 누르면 변경할 수 있어요"}

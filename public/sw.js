@@ -1,4 +1,4 @@
-const CACHE_NAME = "haru-shell-v1";
+const CACHE_NAME = "haru-shell-v2";
 const APP_SHELL = [
   "/",
   "/manifest.webmanifest",
@@ -64,5 +64,21 @@ self.addEventListener("fetch", (event) => {
           return response;
         }),
     ),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        const existingClient = clients.find((client) =>
+          client.url.startsWith(self.location.origin),
+        );
+        return existingClient
+          ? existingClient.focus()
+          : self.clients.openWindow("/");
+      }),
   );
 });

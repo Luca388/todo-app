@@ -80,11 +80,18 @@ const GUEST_TIMER_KEY = "haru:guest-timer:v1";
 const TIMER_SETTINGS_KEY = "haru:timer-settings:v1";
 const DEFAULT_REPEAT_COUNT = 1;
 const MAX_REPEAT_COUNT = 99;
+const DEFAULT_SOUND_ENABLED = true;
+const DEFAULT_AUTO_START_REST = true;
+const DEFAULT_AUTO_START_FOCUS = true;
 
 type TimerDurations = Record<TimerMode, number>;
 type TimerSettings = TimerDurations & {
+  autoStartFocus: boolean;
+  autoStartRest: boolean;
+  browserNotificationsEnabled: boolean;
   currentRound: number;
   repeatCount: number;
+  soundEnabled: boolean;
 };
 
 type GuestCompletedSession = {
@@ -201,12 +208,30 @@ function readTimerSettings(): TimerSettings {
               repeatCount,
             )
           : 1,
+      soundEnabled:
+        typeof parsed.soundEnabled === "boolean"
+          ? parsed.soundEnabled
+          : DEFAULT_SOUND_ENABLED,
+      browserNotificationsEnabled:
+        parsed.browserNotificationsEnabled === true,
+      autoStartRest:
+        typeof parsed.autoStartRest === "boolean"
+          ? parsed.autoStartRest
+          : DEFAULT_AUTO_START_REST,
+      autoStartFocus:
+        typeof parsed.autoStartFocus === "boolean"
+          ? parsed.autoStartFocus
+          : DEFAULT_AUTO_START_FOCUS,
     };
   } catch {
     return {
       ...defaultTimerDurations,
+      autoStartFocus: DEFAULT_AUTO_START_FOCUS,
+      autoStartRest: DEFAULT_AUTO_START_REST,
+      browserNotificationsEnabled: false,
       currentRound: 1,
       repeatCount: DEFAULT_REPEAT_COUNT,
+      soundEnabled: DEFAULT_SOUND_ENABLED,
     };
   }
 }
@@ -321,6 +346,20 @@ export function TodoTimerApp() {
   });
   const [repeatCount, setRepeatCount] = useState(DEFAULT_REPEAT_COUNT);
   const [currentRound, setCurrentRound] = useState(1);
+  const [soundEnabled, setSoundEnabled] = useState(DEFAULT_SOUND_ENABLED);
+  const [browserNotificationsEnabled, setBrowserNotificationsEnabled] =
+    useState(false);
+  const [browserNotificationsSupported, setBrowserNotificationsSupported] =
+    useState(false);
+  const [notificationMessage, setNotificationMessage] = useState<string | null>(
+    null,
+  );
+  const [autoStartRest, setAutoStartRest] = useState(
+    DEFAULT_AUTO_START_REST,
+  );
+  const [autoStartFocus, setAutoStartFocus] = useState(
+    DEFAULT_AUTO_START_FOCUS,
+  );
   const [remainingSeconds, setRemainingSeconds] = useState(
     defaultTimerDurations.focus,
   );
@@ -356,6 +395,7 @@ export function TodoTimerApp() {
   const remainingSnapshot = useRef(remainingSeconds);
   const pomodoroChannel = useRef<BroadcastChannel | null>(null);
   const guestMigrationUser = useRef<string | null>(null);
+  const audioContext = useRef<AudioContext | null>(null);
 
   const authUserId = authUser?.id;
   const currentRemoteTodos =
@@ -433,11 +473,148 @@ export function TodoTimerApp() {
     pomodoroChannel.current?.postMessage("pomodoro-changed");
   }, []);
 
+  const getAudioContext = useCallback(() => {
+    if (audioContext.current?.state === "closed") {
+      audioContext.current = null;
+    }
+    if (audioContext.current) return audioContext.current;
+
+    const AudioContextConstructor =
+      window.AudioContext ??
+      (
+        window as typeof window & {
+          webkitAudioContext?: typeof AudioContext;
+        }
+      ).webkitAudioContext;
+    if (!AudioContextConstructor) return null;
+
+    const context = new AudioContextConstructor();
+    audioContext.current = context;
+    return context;
+  }, []);
+
+  const primeTimerSound = useCallback(() => {
+    const context = getAudioContext();
+    if (!context) return;
+
+    const unlock = () => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      gain.gain.setValueAtTime(0.0001, context.currentTime);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.01);
+    };
+
+    if (context.state === "suspended") {
+      void context.resume().then(unlock).catch(() => undefined);
+    } else {
+      unlock();
+    }
+  }, [getAudioContext]);
+
+  const playTimerSound = useCallback(
+    (kind: "complete" | "auto-start") => {
+      if (!soundEnabled) return;
+      const context = getAudioContext();
+      if (!context) return;
+
+      const play = () => {
+        const startAt = context.currentTime;
+        const frequencies =
+          kind === "complete" ? [659.25, 783.99] : [523.25, 659.25];
+
+        frequencies.forEach((frequency, index) => {
+          const oscillator = context.createOscillator();
+          const gain = context.createGain();
+          const noteStartsAt = startAt + index * 0.15;
+          oscillator.type = "sine";
+          oscillator.frequency.setValueAtTime(frequency, noteStartsAt);
+          gain.gain.setValueAtTime(0.0001, noteStartsAt);
+          gain.gain.exponentialRampToValueAtTime(
+            0.16,
+            noteStartsAt + 0.025,
+          );
+          gain.gain.exponentialRampToValueAtTime(
+            0.0001,
+            noteStartsAt + 0.28,
+          );
+          oscillator.connect(gain);
+          gain.connect(context.destination);
+          oscillator.start(noteStartsAt);
+          oscillator.stop(noteStartsAt + 0.3);
+        });
+      };
+
+      if (context.state === "suspended") {
+        void context.resume().then(play).catch(() => undefined);
+      } else {
+        play();
+      }
+    },
+    [getAudioContext, soundEnabled],
+  );
+
+  const showBrowserNotification = useCallback(
+    (title: string, body: string, tag: string) => {
+      if (
+        !browserNotificationsEnabled ||
+        !("Notification" in window) ||
+        window.Notification.permission !== "granted"
+      ) {
+        return;
+      }
+
+      const options: NotificationOptions = {
+        body,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        tag,
+      };
+      const showFallback = () => {
+        try {
+          new window.Notification(title, options);
+        } catch {
+          // Service worker notifications cover browsers that reject this API.
+        }
+      };
+
+      if ("serviceWorker" in navigator) {
+        void navigator.serviceWorker
+          .getRegistration()
+          .then((registration) =>
+            registration
+              ? registration.showNotification(title, options)
+              : showFallback(),
+          )
+          .catch(showFallback);
+      } else {
+        showFallback();
+      }
+    },
+    [browserNotificationsEnabled],
+  );
+
+  const announceTimerEvent = useCallback(
+    (
+      title: string,
+      body: string,
+      kind: "complete" | "auto-start",
+      tag: string,
+    ) => {
+      playTimerSound(kind);
+      showBrowserNotification(title, body, tag);
+    },
+    [playTimerSound, showBrowserNotification],
+  );
+
   const startAutomaticSession = useCallback(
     async (
       nextMode: TimerMode,
       nextRound: number,
       focusTaskId: string | null,
+      shouldAutoStart: boolean,
     ) => {
       const plannedSeconds = timerDurations[nextMode];
       setMode(nextMode);
@@ -453,6 +630,8 @@ export function TodoTimerApp() {
         return;
       }
 
+      if (!shouldAutoStart) return;
+
       if (!authUserId) {
         const nextGuestTimer: GuestTimerSession = {
           elapsedSeconds: 0,
@@ -464,6 +643,14 @@ export function TodoTimerApp() {
         };
         setGuestTimer(nextGuestTimer);
         setIsRunning(true);
+        announceTimerEvent(
+          nextMode === "rest" ? "휴식 자동 시작" : "집중 자동 시작",
+          nextMode === "rest"
+            ? `${nextRound}/${repeatCount}회 집중을 마치고 휴식을 시작합니다.`
+            : `${nextRound}/${repeatCount}회 집중을 시작합니다.`,
+          "auto-start",
+          `haru-auto-${nextMode}`,
+        );
         return;
       }
 
@@ -483,8 +670,22 @@ export function TodoTimerApp() {
       );
       setIsRunning(started.status === "running");
       broadcastPomodoroChange();
+      announceTimerEvent(
+        startedMode === "rest" ? "휴식 자동 시작" : "집중 자동 시작",
+        startedMode === "rest"
+          ? `${nextRound}/${repeatCount}회 집중을 마치고 휴식을 시작합니다.`
+          : `${nextRound}/${repeatCount}회 집중을 시작합니다.`,
+        "auto-start",
+        `haru-auto-${startedMode}`,
+      );
     },
-    [authUserId, broadcastPomodoroChange, timerDurations],
+    [
+      announceTimerEvent,
+      authUserId,
+      broadcastPomodoroChange,
+      repeatCount,
+      timerDurations,
+    ],
   );
 
   useEffect(() => {
@@ -505,6 +706,16 @@ export function TodoTimerApp() {
       });
       setRepeatCount(settings.repeatCount);
       setCurrentRound(settings.currentRound);
+      setSoundEnabled(settings.soundEnabled);
+      setAutoStartRest(settings.autoStartRest);
+      setAutoStartFocus(settings.autoStartFocus);
+      const notificationsSupported = "Notification" in window;
+      setBrowserNotificationsSupported(notificationsSupported);
+      setBrowserNotificationsEnabled(
+        settings.browserNotificationsEnabled &&
+          notificationsSupported &&
+          window.Notification.permission === "granted",
+      );
       setGuestTimer(storedTimer);
       setGuestStorageReady(true);
 
@@ -570,14 +781,22 @@ export function TodoTimerApp() {
       TIMER_SETTINGS_KEY,
       JSON.stringify({
         ...timerDurations,
+        autoStartFocus,
+        autoStartRest,
+        browserNotificationsEnabled,
         currentRound,
         repeatCount,
+        soundEnabled,
       }),
     );
   }, [
+    autoStartFocus,
+    autoStartRest,
+    browserNotificationsEnabled,
     currentRound,
     guestStorageReady,
     repeatCount,
+    soundEnabled,
     timerDurations,
   ]);
 
@@ -610,6 +829,17 @@ export function TodoTimerApp() {
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
   }, []);
+
+  useEffect(
+    () => () => {
+      const context = audioContext.current;
+      audioContext.current = null;
+      if (context && context.state !== "closed") {
+        void context.close();
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (typeof BroadcastChannel === "undefined") return;
@@ -647,6 +877,14 @@ export function TodoTimerApp() {
         setPomodoroPending(false);
         setRepeatCount(storedTimerSettings.repeatCount);
         setCurrentRound(storedTimerSettings.currentRound);
+        setSoundEnabled(storedTimerSettings.soundEnabled);
+        setAutoStartRest(storedTimerSettings.autoStartRest);
+        setAutoStartFocus(storedTimerSettings.autoStartFocus);
+        setBrowserNotificationsEnabled(
+          storedTimerSettings.browserNotificationsEnabled &&
+            "Notification" in window &&
+            window.Notification.permission === "granted",
+        );
 
         if (storedGuestTimer) {
           const elapsed = getGuestTimerElapsed(storedGuestTimer);
@@ -918,6 +1156,14 @@ export function TodoTimerApp() {
       if (next === 0) {
         window.clearInterval(intervalId);
         setIsRunning(false);
+        announceTimerEvent(
+          mode === "focus" ? "집중 종료" : "휴식 종료",
+          mode === "focus"
+            ? `${currentRound}/${repeatCount}회 집중을 마쳤습니다.`
+            : "휴식이 끝났습니다.",
+          "complete",
+          `haru-complete-${mode}`,
+        );
 
         if (authUserId && currentPomodoro) {
           setPomodoroPending(true);
@@ -961,6 +1207,7 @@ export function TodoTimerApp() {
                   nextMode,
                   nextRound,
                   completed.todo_id ?? activeTaskId,
+                  nextMode === "rest" ? autoStartRest : autoStartFocus,
                 );
                 return;
               }
@@ -1013,6 +1260,7 @@ export function TodoTimerApp() {
               nextMode,
               nextRound,
               activeTaskId,
+              nextMode === "rest" ? autoStartRest : autoStartFocus,
             );
           } else {
             setMode("focus");
@@ -1027,6 +1275,9 @@ export function TodoTimerApp() {
     return () => window.clearInterval(intervalId);
   }, [
     activeTaskId,
+    announceTimerEvent,
+    autoStartFocus,
+    autoStartRest,
     authUserId,
     broadcastPomodoroChange,
     currentRound,
@@ -1063,6 +1314,46 @@ export function TodoTimerApp() {
     );
     setRepeatCount(safeCount);
     setCurrentRound(1);
+  }
+
+  function handleSoundEnabledChange(enabled: boolean) {
+    setSoundEnabled(enabled);
+    if (enabled) primeTimerSound();
+  }
+
+  async function handleBrowserNotificationsEnabledChange(enabled: boolean) {
+    setNotificationMessage(null);
+
+    if (!enabled) {
+      setBrowserNotificationsEnabled(false);
+      return;
+    }
+
+    if (!("Notification" in window)) {
+      setBrowserNotificationsSupported(false);
+      setNotificationMessage("이 브라우저는 알림을 지원하지 않습니다.");
+      return;
+    }
+
+    try {
+      const permission =
+        window.Notification.permission === "default"
+          ? await window.Notification.requestPermission()
+          : window.Notification.permission;
+
+      if (permission === "granted") {
+        setBrowserNotificationsEnabled(true);
+        setNotificationMessage("브라우저 알림을 켰습니다.");
+      } else {
+        setBrowserNotificationsEnabled(false);
+        setNotificationMessage(
+          "브라우저 설정에서 이 사이트의 알림을 허용해 주세요.",
+        );
+      }
+    } catch {
+      setBrowserNotificationsEnabled(false);
+      setNotificationMessage("브라우저 알림 권한을 확인하지 못했습니다.");
+    }
   }
 
   function handleDurationChange(seconds: number) {
@@ -1273,6 +1564,7 @@ export function TodoTimerApp() {
 
   async function handleToggleTimer() {
     if (pomodoroPending || pomodoroLoading) return;
+    if (!isRunning && soundEnabled) primeTimerSound();
 
     if (isRunning) {
       setIsRunning(false);
@@ -1677,12 +1969,18 @@ export function TodoTimerApp() {
 
           <FocusTimer
             activeTask={activeTask}
+            autoStartFocus={autoStartFocus}
+            autoStartRest={autoStartRest}
+            browserNotificationsEnabled={browserNotificationsEnabled}
+            browserNotificationsSupported={browserNotificationsSupported}
             error={pomodoroError}
             hasActiveSession={hasActiveTimerSession}
             isPending={pomodoroPending || pomodoroLoading}
             mode={mode}
+            notificationMessage={notificationMessage}
             remainingSeconds={remainingSeconds}
             repeatCount={repeatCount}
+            soundEnabled={soundEnabled}
             currentRound={currentRound}
             totalSeconds={
               currentPomodoro?.planned_seconds ??
@@ -1693,10 +1991,16 @@ export function TodoTimerApp() {
             todayFocusSeconds={todayFocusSeconds}
             isRunning={isRunning}
             onDurationChange={handleDurationChange}
+            onAutoStartFocusChange={setAutoStartFocus}
+            onAutoStartRestChange={setAutoStartRest}
+            onBrowserNotificationsEnabledChange={
+              handleBrowserNotificationsEnabledChange
+            }
             onModeChange={handleModeChange}
             onRepeatCountChange={handleRepeatCountChange}
             onRetry={handleRetryPomodoro}
             onSkip={handleSkipTimer}
+            onSoundEnabledChange={handleSoundEnabledChange}
             onToggleRunning={handleToggleTimer}
             onReset={handleResetTimer}
           />

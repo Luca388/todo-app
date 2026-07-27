@@ -130,6 +130,12 @@ test("persists and restores the Pomodoro session lifecycle", async () => {
   assert.match(app, /startAutomaticSession/);
   assert.match(app, /DEFAULT_REPEAT_COUNT = 1/);
   assert.match(app, /currentRound < repeatCount/);
+  assert.match(app, /Notification\.requestPermission\(\)/);
+  assert.match(app, /playTimerSound/);
+  assert.match(app, /autoStartRest/);
+  assert.match(app, /autoStartFocus/);
+  assert.match(app, /if \(!shouldAutoStart\) return/);
+  assert.match(app, /browserNotificationsEnabled/);
   assert.match(app, /new BroadcastChannel\("haru-pomodoro"\)/);
   assert.match(pomodoro, /last_resumed_at/);
   assert.match(migration, /status in \('running', 'paused'\)/);
@@ -142,6 +148,9 @@ test("persists and restores the Pomodoro session lifecycle", async () => {
   assert.match(timer, /건너뛰기/);
   assert.match(timer, /집중 반복/);
   assert.match(timer, /onRepeatCountChange/);
+  assert.match(timer, /브라우저/);
+  assert.match(timer, /다음 집중/);
+  assert.match(timer, /role="switch"/);
   assert.match(timer, /rest: "휴식"/);
   assert.doesNotMatch(timer, /짧은 휴식|긴 휴식/);
   assert.match(timer, /todayCompletedSessions/);
@@ -169,8 +178,9 @@ test("ships an installable offline PWA shell", async () => {
     manifest.icons.map((icon) => icon.sizes),
     ["192x192", "512x512"],
   );
-  assert.match(serviceWorker, /haru-shell-v1/);
+  assert.match(serviceWorker, /haru-shell-v2/);
   assert.match(serviceWorker, /request\.mode === "navigate"/);
+  assert.match(serviceWorker, /notificationclick/);
   assert.match(layout, /manifest: "\/manifest\.webmanifest"/);
   assert.match(app, /beforeinstallprompt/);
   assert.match(app, /serviceWorker\.register\("\/sw\.js"\)/);

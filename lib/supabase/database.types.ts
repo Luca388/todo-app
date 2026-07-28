@@ -33,6 +33,56 @@ export type Database = {
         };
         Relationships: [];
       };
+      habits: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          position: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string;
+          name: string;
+          position?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          position?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      habit_completions: {
+        Row: {
+          habit_id: string;
+          user_id: string;
+          completed_on: string;
+          created_at: string;
+        };
+        Insert: {
+          habit_id: string;
+          user_id?: string;
+          completed_on: string;
+          created_at?: string;
+        };
+        Update: {
+          completed_on?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "habit_completions_habit_id_fkey";
+            columns: ["habit_id"];
+            isOneToOne: false;
+            referencedRelation: "habits";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       todos: {
         Row: {
           id: string;
@@ -136,6 +186,12 @@ export type TodoListInsert =
   Database["public"]["Tables"]["todo_lists"]["Insert"];
 export type TodoListUpdate =
   Database["public"]["Tables"]["todo_lists"]["Update"];
+export type HabitRow = Database["public"]["Tables"]["habits"]["Row"];
+export type HabitInsert = Database["public"]["Tables"]["habits"]["Insert"];
+export type HabitCompletionRow =
+  Database["public"]["Tables"]["habit_completions"]["Row"];
+export type HabitCompletionInsert =
+  Database["public"]["Tables"]["habit_completions"]["Insert"];
 
 export type PomodoroSessionRow =
   Database["public"]["Tables"]["pomodoro_sessions"]["Row"];

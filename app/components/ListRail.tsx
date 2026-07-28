@@ -12,6 +12,7 @@ type ListRailProps = {
   onAddList: (name: string) => Promise<boolean>;
   onDeleteList: (id: string) => Promise<boolean>;
   onOpenCalendar: () => void;
+  onOpenHabitTracker: () => void;
   onRenameList: (id: string, name: string) => Promise<boolean>;
   onSelectList: (id: string) => void;
 };
@@ -25,6 +26,7 @@ export function ListRail({
   onAddList,
   onDeleteList,
   onOpenCalendar,
+  onOpenHabitTracker,
   onRenameList,
   onSelectList,
 }: ListRailProps) {
@@ -71,17 +73,30 @@ export function ListRail({
 
   return (
     <aside className="workspace-rail" aria-label="할 일 리스트">
-      <button
-        className="calendar-launch"
-        type="button"
-        onClick={onOpenCalendar}
-      >
-        <span aria-hidden="true">▦</span>
-        <span>
-          <strong>일정</strong>
-          <small>캘린더와 기록</small>
-        </span>
-      </button>
+      <div className="rail-tools">
+        <button
+          className="calendar-launch"
+          type="button"
+          onClick={onOpenCalendar}
+        >
+          <span aria-hidden="true">▦</span>
+          <span>
+            <strong>일정</strong>
+            <small>캘린더와 기록</small>
+          </span>
+        </button>
+        <button
+          className="habit-launch"
+          type="button"
+          onClick={onOpenHabitTracker}
+        >
+          <span aria-hidden="true">✓</span>
+          <span>
+            <strong>습관 트래커</strong>
+            <small>매일의 작은 체크</small>
+          </span>
+        </button>
+      </div>
 
       <div className="rail-section-heading">
         <span>리스트</span>

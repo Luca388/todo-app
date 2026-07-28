@@ -46,6 +46,7 @@ test("server-renders the Haru app and authentication entry points", async () => 
   assert.match(html, /todo 리스트/);
   assert.match(html, /미완료/);
   assert.match(html, /일정/);
+  assert.match(html, /습관 트래커/);
 });
 
 test("stores and classifies task dates without timezone drift", () => {
@@ -105,9 +106,12 @@ test("wires todo lists and the calendar to Supabase with visible request states"
     taskDates,
     listRail,
     calendar,
+    habitTracker,
     lists,
     todos,
     migration,
+    habits,
+    habitMigration,
   ] = await Promise.all([
       readFile(
         new URL("../app/components/TodoTimerApp.tsx", import.meta.url),
@@ -134,11 +138,23 @@ test("wires todo lists and the calendar to Supabase with visible request states"
         new URL("../app/components/CalendarPanel.tsx", import.meta.url),
         "utf8",
       ),
+      readFile(
+        new URL("../app/components/HabitTrackerPanel.tsx", import.meta.url),
+        "utf8",
+      ),
       readFile(new URL("../lib/supabase/lists.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/supabase/todos.ts", import.meta.url), "utf8"),
       readFile(
         new URL(
           "../supabase/migrations/202607270002_todo_lists_and_completion_dates.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+      readFile(new URL("../lib/supabase/habits.ts", import.meta.url), "utf8"),
+      readFile(
+        new URL(
+          "../supabase/migrations/202607280002_habit_tracker.sql",
           import.meta.url,
         ),
         "utf8",
@@ -195,14 +211,25 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.match(taskDates, /T12:00:00\.000Z/);
   assert.match(taskDates, /getTaskDateStatus/);
   assert.match(listRail, /캘린더와 기록/);
+  assert.match(listRail, /매일의 작은 체크/);
+  assert.match(listRail, /onOpenHabitTracker/);
   assert.match(listRail, /새 리스트 추가/);
   assert.match(listRail, /이름 변경/);
   assert.match(calendar, /집중한 시간/);
   assert.match(calendar, /완료한 작업/);
+  assert.match(
+    calendar,
+    /selectedTasks\.filter\(\s*\(task\) => task\.completed/,
+  );
+  assert.doesNotMatch(calendar, /task\.completedAt/);
   assert.match(calendar, /이 날짜에 할 일 추가/);
   assert.match(calendar, /이날의 할 일에 추가했습니다/);
   assert.match(calendar, /onSelectTask\(task\.id\)/);
   assert.match(calendar, /onOpenTask\(task\.id\)/);
+  assert.match(habitTracker, /HABIT TRACKER/);
+  assert.match(habitTracker, /연속 \$\{streak\}일/);
+  assert.match(habitTracker, /onToggleHabit/);
+  assert.match(habitTracker, /습관 추가/);
   assert.match(taskDetail, /할 일 상세/);
   assert.doesNotMatch(taskDetail, /type="date"/);
   assert.doesNotMatch(taskDetail, /예상 집중 횟수|estimate/);
@@ -229,6 +256,17 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.match(migration, /add column list_id/);
   assert.match(migration, /add column completed_at/);
   assert.match(migration, /alter column list_id set not null/);
+  assert.match(app, /listHabits\(\)/);
+  assert.match(app, /listHabitCompletions\(\)/);
+  assert.match(app, /await setHabitCompletion/);
+  assert.match(app, /haru:guest-habits:v1/);
+  assert.match(habits, /export async function createHabit/);
+  assert.match(habits, /onConflict: "habit_id,completed_on"/);
+  assert.match(habitMigration, /create table public\.habits/);
+  assert.match(habitMigration, /create table public\.habit_completions/);
+  assert.match(habitMigration, /alter table public\.habits force row level security/);
+  assert.match(habitMigration, /habit_completions_insert_own/);
+  assert.match(habitMigration, /habit_completions_update_own/);
 });
 
 test("keeps local secrets, logs, and deployment archives out of Git", async () => {

@@ -125,10 +125,8 @@ export function CalendarPanel({
     .sort(
       (left, right) => Number(left.completed) - Number(right.completed),
     );
-  const completedOnSelectedDate = tasks.filter(
-    (task) =>
-      task.completedAt &&
-      getLocalDateKey(new Date(task.completedAt)) === selectedDate,
+  const completedOnSelectedDate = selectedTasks.filter(
+    (task) => task.completed,
   );
   const selectedFocusSeconds = focusSecondsByDate[selectedDate] ?? 0;
   const effectiveDraftListId = lists.some(

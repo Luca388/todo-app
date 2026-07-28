@@ -12,23 +12,30 @@ import {
 import {
   cancelPomodoro,
   completePomodoro,
+  createHabit,
   createTodo,
   createTodoList,
   createTodos,
+  deleteHabit,
   deleteTodoList,
   deleteTodos,
   ensureDefaultTodoList,
   getActivePomodoro,
   getCurrentSession,
+  importHabitCompletions,
   importCompletedPomodoros,
+  isHabitsSchemaMissing,
   isSupabaseConfigured,
   isTodoListsSchemaMissing,
+  listHabitCompletions,
+  listHabits,
   listRecentPomodoros,
   listTodos,
   onAuthStateChange,
   pausePomodoro,
   reorderTodos,
   resumePomodoro,
+  setHabitCompletion,
   setTodoCompleted,
   signInWithGoogle,
   signOut,
@@ -48,6 +55,8 @@ import {
 } from "../task-dates";
 import type {
   FocusHistoryEntry,
+  Habit,
+  HabitCompletion,
   Task,
   TaskLabel,
   TimerMode,
@@ -55,6 +64,7 @@ import type {
 } from "../types";
 import { CalendarPanel } from "./CalendarPanel";
 import { FocusTimer } from "./FocusTimer";
+import { HabitTrackerPanel } from "./HabitTrackerPanel";
 import { ListRail } from "./ListRail";
 import { Sidebar } from "./Sidebar";
 import {
@@ -94,6 +104,7 @@ const timerModes: Record<PomodoroMode, TimerMode> = {
 };
 
 const GUEST_DATA_KEY = "haru:guest-data:v1";
+const GUEST_HABITS_KEY = "haru:guest-habits:v1";
 const GUEST_TIMER_KEY = "haru:guest-timer:v1";
 const TIMER_SETTINGS_KEY = "haru:timer-settings:v1";
 const DEFAULT_REPEAT_COUNT = 1;
@@ -167,6 +178,54 @@ function isTodoList(value: unknown): value is TodoList {
     typeof list.position === "number" &&
     Number.isFinite(list.position)
   );
+}
+
+function isHabit(value: unknown): value is Habit {
+  if (!value || typeof value !== "object") return false;
+  const habit = value as Partial<Habit>;
+  return (
+    typeof habit.id === "string" &&
+    typeof habit.name === "string" &&
+    habit.name.trim().length > 0 &&
+    typeof habit.position === "number" &&
+    Number.isFinite(habit.position)
+  );
+}
+
+function isHabitCompletion(value: unknown): value is HabitCompletion {
+  if (!value || typeof value !== "object") return false;
+  const completion = value as Partial<HabitCompletion>;
+  return (
+    typeof completion.habitId === "string" &&
+    typeof completion.date === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(completion.date)
+  );
+}
+
+function readGuestHabitData() {
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(GUEST_HABITS_KEY) ?? "{}",
+    ) as {
+      completions?: unknown;
+      habits?: unknown;
+    };
+    const habits = Array.isArray(parsed.habits)
+      ? parsed.habits.filter(isHabit)
+      : [];
+    const habitIds = new Set(habits.map((habit) => habit.id));
+    const completions = Array.isArray(parsed.completions)
+      ? parsed.completions
+          .filter(isHabitCompletion)
+          .filter((completion) => habitIds.has(completion.habitId))
+      : [];
+    return { completions, habits };
+  } catch {
+    return {
+      completions: [] as HabitCompletion[],
+      habits: [] as Habit[],
+    };
+  }
 }
 
 function readGuestData() {
@@ -394,10 +453,22 @@ type RemoteListsState = {
   error: string | null;
 };
 
+type RemoteHabitsState = {
+  ownerId: string;
+  habits: Habit[];
+  completions: HabitCompletion[];
+  schemaAvailable: boolean;
+  error: string | null;
+};
+
 export function TodoTimerApp() {
   const supabaseConfigured = isSupabaseConfigured();
   const [guestTasks, setGuestTasks] = useState(initialTasks);
   const [guestLists, setGuestLists] = useState<TodoList[]>([DEFAULT_LIST]);
+  const [guestHabits, setGuestHabits] = useState<Habit[]>([]);
+  const [guestHabitCompletions, setGuestHabitCompletions] = useState<
+    HabitCompletion[]
+  >([]);
   const [guestCompletedSessions, setGuestCompletedSessions] = useState<
     GuestCompletedSession[]
   >([]);
@@ -405,8 +476,11 @@ export function TodoTimerApp() {
   const [guestTimer, setGuestTimer] = useState<GuestTimerSession | null>(null);
   const [remoteTodos, setRemoteTodos] = useState<RemoteTodosState | null>(null);
   const [remoteLists, setRemoteLists] = useState<RemoteListsState | null>(null);
+  const [remoteHabits, setRemoteHabits] =
+    useState<RemoteHabitsState | null>(null);
   const [activeListId, setActiveListId] = useState(LOCAL_DEFAULT_LIST_ID);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isHabitTrackerOpen, setIsHabitTrackerOpen] = useState(false);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [newTask, setNewTask] = useState("");
@@ -442,6 +516,9 @@ export function TodoTimerApp() {
   const [todoActionError, setTodoActionError] = useState<string | null>(null);
   const [todoReloadToken, setTodoReloadToken] = useState(0);
   const [todoSaving, setTodoSaving] = useState(false);
+  const [habitSaving, setHabitSaving] = useState(false);
+  const [habitActionError, setHabitActionError] = useState<string | null>(null);
+  const [habitReloadToken, setHabitReloadToken] = useState(0);
   const [pendingTodoIds, setPendingTodoIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -465,6 +542,7 @@ export function TodoTimerApp() {
   const remainingSnapshot = useRef(remainingSeconds);
   const pomodoroChannel = useRef<BroadcastChannel | null>(null);
   const guestMigrationUser = useRef<string | null>(null);
+  const guestHabitMigrationUser = useRef<string | null>(null);
   const audioContext = useRef<AudioContext | null>(null);
 
   const authUserId = authUser?.id;
@@ -472,6 +550,8 @@ export function TodoTimerApp() {
     authUserId && remoteTodos?.ownerId === authUserId ? remoteTodos : null;
   const currentRemoteLists =
     authUserId && remoteLists?.ownerId === authUserId ? remoteLists : null;
+  const currentRemoteHabits =
+    authUserId && remoteHabits?.ownerId === authUserId ? remoteHabits : null;
   const storedTasks = authUserId
     ? (currentRemoteTodos?.tasks ?? [])
     : guestTasks;
@@ -484,6 +564,16 @@ export function TodoTimerApp() {
   const lists = authUserId
     ? (currentRemoteLists?.lists ?? [])
     : guestLists;
+  const habits = authUserId
+    ? (currentRemoteHabits?.habits ?? [])
+    : guestHabits;
+  const habitCompletions = authUserId
+    ? (currentRemoteHabits?.completions ?? [])
+    : guestHabitCompletions;
+  const habitsLoading = Boolean(authUserId && !currentRemoteHabits);
+  const habitsError = authUserId
+    ? (currentRemoteHabits?.error ?? habitActionError)
+    : habitActionError;
   const activeTask = allTasks.find((task) => task.id === activeTaskId);
   const detailTask = allTasks.find((task) => task.id === detailTaskId);
   const currentPomodoro =
@@ -803,12 +893,15 @@ export function TodoTimerApp() {
       if (cancelled) return;
 
       const guestData = readGuestData();
+      const guestHabitData = readGuestHabitData();
       const settings = readTimerSettings();
       const storedTimer = readGuestTimer();
 
       setGuestTasks(guestData.tasks);
       setGuestLists(guestData.lists);
       setGuestCompletedSessions(guestData.sessions);
+      setGuestHabits(guestHabitData.habits);
+      setGuestHabitCompletions(guestHabitData.completions);
       setTimerDurations({
         focus: settings.focus,
         rest: settings.rest,
@@ -858,6 +951,22 @@ export function TodoTimerApp() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!guestStorageReady || authUserId) return;
+    window.localStorage.setItem(
+      GUEST_HABITS_KEY,
+      JSON.stringify({
+        completions: guestHabitCompletions,
+        habits: guestHabits,
+      }),
+    );
+  }, [
+    authUserId,
+    guestHabitCompletions,
+    guestHabits,
+    guestStorageReady,
+  ]);
 
   useEffect(() => {
     if (!guestStorageReady || authUserId) return;
@@ -960,14 +1069,20 @@ export function TodoTimerApp() {
       setAuthUser(user);
       if (!user) {
         const storedGuestData = readGuestData();
+        const storedGuestHabitData = readGuestHabitData();
         const storedTimerSettings = readTimerSettings();
         const storedGuestTimer = readGuestTimer();
         guestMigrationUser.current = null;
+        guestHabitMigrationUser.current = null;
         setGuestTasks(storedGuestData.tasks);
         setGuestLists(storedGuestData.lists);
         setGuestCompletedSessions(storedGuestData.sessions);
+        setGuestHabits(storedGuestHabitData.habits);
+        setGuestHabitCompletions(storedGuestHabitData.completions);
         setRemoteTodos(null);
         setRemoteLists(null);
+        setRemoteHabits(null);
+        setHabitActionError(null);
         setRemoteFocusHistory([]);
         setTodoActionError(null);
         setPendingTodoIds(new Set());
@@ -1256,6 +1371,105 @@ export function TodoTimerApp() {
     guestStorageReady,
     guestTasks,
     todoReloadToken,
+  ]);
+
+  useEffect(() => {
+    if (!authUserId || !guestStorageReady) return;
+
+    const ownerId = authUserId;
+    let mounted = true;
+
+    async function loadAndMigrateHabits() {
+      try {
+        let [habitRows, completionRows] = await Promise.all([
+          listHabits(),
+          listHabitCompletions(),
+        ]);
+
+        if (
+          guestHabitMigrationUser.current !== ownerId &&
+          guestHabits.length > 0
+        ) {
+          guestHabitMigrationUser.current = ownerId;
+          const habitsByName = new Map(
+            habitRows.map((habit) => [habit.name.trim().toLowerCase(), habit]),
+          );
+          const guestHabitIds = new Map<string, string>();
+
+          for (const guestHabit of guestHabits) {
+            const key = guestHabit.name.trim().toLowerCase();
+            let remoteHabit = habitsByName.get(key);
+            if (!remoteHabit) {
+              remoteHabit = await createHabit(
+                guestHabit.name,
+                habitRows.length,
+              );
+              habitRows = [...habitRows, remoteHabit];
+              habitsByName.set(key, remoteHabit);
+            }
+            guestHabitIds.set(guestHabit.id, remoteHabit.id);
+          }
+
+          await importHabitCompletions(
+            guestHabitCompletions.flatMap((completion) => {
+              const habitId = guestHabitIds.get(completion.habitId);
+              return habitId
+                ? [{ habitId, date: completion.date }]
+                : [];
+            }),
+          );
+          completionRows = await listHabitCompletions();
+          window.localStorage.removeItem(GUEST_HABITS_KEY);
+          setGuestHabits([]);
+          setGuestHabitCompletions([]);
+          setMigrationNotice(
+            `게스트 습관 ${guestHabits.length}개와 체크 기록 ${guestHabitCompletions.length}개를 계정으로 옮겼습니다.`,
+          );
+        }
+
+        if (!mounted) return;
+        setRemoteHabits({
+          ownerId,
+          habits: habitRows.map((habit) => ({
+            id: habit.id,
+            name: habit.name,
+            position: habit.position,
+          })),
+          completions: completionRows.map((completion) => ({
+            habitId: completion.habit_id,
+            date: completion.completed_on,
+          })),
+          schemaAvailable: true,
+          error: null,
+        });
+        setHabitActionError(null);
+      } catch (error) {
+        if (!mounted) return;
+        guestHabitMigrationUser.current = null;
+        const schemaMissing = isHabitsSchemaMissing(error);
+        setRemoteHabits({
+          ownerId,
+          habits: [],
+          completions: [],
+          schemaAvailable: false,
+          error: schemaMissing
+            ? "Supabase에 최신 습관 트래커 SQL을 적용해 주세요."
+            : getErrorMessage(error),
+        });
+      }
+    }
+
+    void loadAndMigrateHabits();
+
+    return () => {
+      mounted = false;
+    };
+  }, [
+    authUserId,
+    guestHabitCompletions,
+    guestHabits,
+    guestStorageReady,
+    habitReloadToken,
   ]);
 
   useEffect(() => {
@@ -2391,6 +2605,170 @@ export function TodoTimerApp() {
     }
   }
 
+  async function handleAddHabit(name: string) {
+    const trimmedName = name.trim();
+    if (
+      !trimmedName ||
+      habitSaving ||
+      habits.some(
+        (habit) =>
+          habit.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+      )
+    ) {
+      if (trimmedName) {
+        setHabitActionError("이미 같은 이름의 습관이 있습니다.");
+      }
+      return false;
+    }
+
+    setHabitSaving(true);
+    setHabitActionError(null);
+
+    if (!authUserId) {
+      setGuestHabits((current) => [
+        ...current,
+        {
+          id: window.crypto.randomUUID(),
+          name: trimmedName,
+          position: current.length,
+        },
+      ]);
+      setHabitSaving(false);
+      return true;
+    }
+
+    if (!currentRemoteHabits?.schemaAvailable) {
+      setHabitActionError("Supabase에 최신 습관 트래커 SQL을 적용해 주세요.");
+      setHabitSaving(false);
+      return false;
+    }
+
+    try {
+      const created = await createHabit(trimmedName, habits.length);
+      setRemoteHabits((current) =>
+        current?.ownerId === authUserId
+          ? {
+              ...current,
+              habits: [
+                ...current.habits,
+                {
+                  id: created.id,
+                  name: created.name,
+                  position: created.position,
+                },
+              ],
+            }
+          : current,
+      );
+      return true;
+    } catch (error) {
+      setHabitActionError(getErrorMessage(error));
+      return false;
+    } finally {
+      setHabitSaving(false);
+    }
+  }
+
+  async function handleToggleHabit(
+    habitId: string,
+    date: string,
+    completed: boolean,
+  ) {
+    if (
+      habitSaving ||
+      !habits.some((habit) => habit.id === habitId) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(date)
+    ) {
+      return false;
+    }
+
+    setHabitSaving(true);
+    setHabitActionError(null);
+
+    const updateCompletions = (current: HabitCompletion[]) => {
+      const withoutDate = current.filter(
+        (entry) => entry.habitId !== habitId || entry.date !== date,
+      );
+      return completed
+        ? [...withoutDate, { habitId, date }]
+        : withoutDate;
+    };
+
+    if (!authUserId) {
+      setGuestHabitCompletions(updateCompletions);
+      setHabitSaving(false);
+      return true;
+    }
+
+    try {
+      await setHabitCompletion(habitId, date, completed);
+      setRemoteHabits((current) =>
+        current?.ownerId === authUserId
+          ? {
+              ...current,
+              completions: updateCompletions(current.completions),
+            }
+          : current,
+      );
+      return true;
+    } catch (error) {
+      setHabitActionError(getErrorMessage(error));
+      return false;
+    } finally {
+      setHabitSaving(false);
+    }
+  }
+
+  async function handleDeleteHabit(id: string) {
+    if (
+      habitSaving ||
+      !habits.some((habit) => habit.id === id)
+    ) {
+      return false;
+    }
+
+    setHabitSaving(true);
+    setHabitActionError(null);
+
+    if (!authUserId) {
+      setGuestHabits((current) =>
+        current.filter((habit) => habit.id !== id),
+      );
+      setGuestHabitCompletions((current) =>
+        current.filter((completion) => completion.habitId !== id),
+      );
+      setHabitSaving(false);
+      return true;
+    }
+
+    try {
+      await deleteHabit(id);
+      setRemoteHabits((current) =>
+        current?.ownerId === authUserId
+          ? {
+              ...current,
+              habits: current.habits.filter((habit) => habit.id !== id),
+              completions: current.completions.filter(
+                (completion) => completion.habitId !== id,
+              ),
+            }
+          : current,
+      );
+      return true;
+    } catch (error) {
+      setHabitActionError(getErrorMessage(error));
+      return false;
+    } finally {
+      setHabitSaving(false);
+    }
+  }
+
+  function handleRetryHabits() {
+    setRemoteHabits(null);
+    setHabitActionError(null);
+    setHabitReloadToken((current) => current + 1);
+  }
+
   function handleCalendarSelectTask(id: string) {
     if (hasActiveTimerSession && id !== activeTaskId) return;
     const task = allTasks.find((candidate) => candidate.id === id);
@@ -2448,7 +2826,14 @@ export function TodoTimerApp() {
           schemaAvailable={listSchemaAvailable}
           onAddList={handleAddList}
           onDeleteList={handleDeleteList}
-          onOpenCalendar={() => setIsCalendarOpen(true)}
+          onOpenCalendar={() => {
+            setIsHabitTrackerOpen(false);
+            setIsCalendarOpen(true);
+          }}
+          onOpenHabitTracker={() => {
+            setIsCalendarOpen(false);
+            setIsHabitTrackerOpen(true);
+          }}
           onRenameList={handleRenameList}
           onSelectList={handleSelectList}
         />
@@ -2573,6 +2958,20 @@ export function TodoTimerApp() {
         onClose={() => setIsCalendarOpen(false)}
         onOpenTask={setDetailTaskId}
         onSelectTask={handleCalendarSelectTask}
+      />
+
+      <HabitTrackerPanel
+        completions={habitCompletions}
+        error={habitsError}
+        habits={habits}
+        isLoading={habitsLoading}
+        isOpen={isHabitTrackerOpen}
+        isSaving={habitSaving}
+        onAddHabit={handleAddHabit}
+        onClose={() => setIsHabitTrackerOpen(false)}
+        onDeleteHabit={handleDeleteHabit}
+        onRetry={handleRetryHabits}
+        onToggleHabit={handleToggleHabit}
       />
 
       {detailTask && (

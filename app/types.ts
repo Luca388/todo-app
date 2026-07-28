@@ -17,6 +17,17 @@ export type TodoList = {
   position: number;
 };
 
+export type Habit = {
+  id: string;
+  name: string;
+  position: number;
+};
+
+export type HabitCompletion = {
+  habitId: string;
+  date: string;
+};
+
 export type FocusHistoryEntry = {
   elapsedSeconds: number;
   endedAt: string;

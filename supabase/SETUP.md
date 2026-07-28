@@ -22,6 +22,7 @@
 - `todos`: 사용자별 할 일
 - `pomodoro_sessions`: 타이머 실행 기록
 - `todo_lists`: 이름을 바꾸거나 추가·삭제할 수 있는 할 일 리스트
+- `habits`, `habit_completions`: 습관과 날짜별 체크 기록
 - `due_at`, `completed_at`: 캘린더 일정과 날짜별 완료 기록
 - 인덱스: 사용자별 목록 조회 속도 개선
 - RLS 정책: 다른 사용자의 행을 읽거나 바꾸지 못하게 차단
@@ -52,6 +53,7 @@ Publishable key는 브라우저에 포함되어도 되는 키입니다. 비밀�
 
 - `lib/supabase/auth.ts`: Google 로그인과 로그아웃
 - `lib/supabase/todos.ts`: 할 일 조회·추가·수정·삭제
+- `lib/supabase/habits.ts`: 습관과 날짜별 체크 기록
 - `lib/supabase/pomodoro.ts`: 실행 중인 타이머와 완료 기록
 
-로그인 전 임시 할 일과 리스트는 기기에 보관되고, 첫 로그인 때 계정으로 옮겨집니다.
+로그인 전 임시 할 일, 리스트와 습관은 기기에 보관되고, 첫 로그인 때 계정으로 옮겨집니다.

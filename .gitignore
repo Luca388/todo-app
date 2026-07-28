@@ -48,10 +48,14 @@ playwright-report/
 
 # Logs
 *.log
+log.txt
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Local archives
+*.tgz
 
 # Editor settings
 .idea/

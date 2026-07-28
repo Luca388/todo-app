@@ -1,4 +1,5 @@
 export type TodoLabel = "work" | "personal" | "health";
+export type TodoRecurrence = "none" | "daily" | "weekly" | "monthly";
 export type PomodoroMode = "focus" | "short_break" | "long_break";
 export type PomodoroStatus =
   | "running"
@@ -45,6 +46,8 @@ export type Database = {
           list_id: string;
           position: number;
           estimated_pomodoros: number;
+          recurrence: TodoRecurrence;
+          recurrence_spawned: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -59,6 +62,8 @@ export type Database = {
           list_id?: string;
           position?: number;
           estimated_pomodoros?: number;
+          recurrence?: TodoRecurrence;
+          recurrence_spawned?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -71,6 +76,8 @@ export type Database = {
           list_id?: string;
           position?: number;
           estimated_pomodoros?: number;
+          recurrence?: TodoRecurrence;
+          recurrence_spawned?: boolean;
           updated_at?: string;
         };
         Relationships: [];
@@ -121,7 +128,12 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      complete_recurring_todo: {
+        Args: { target_todo_id: string };
+        Returns: Database["public"]["Tables"]["todos"]["Row"][];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

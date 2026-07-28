@@ -738,6 +738,11 @@ button {
   opacity: 0.6;
 }
 
+.task-item.is-dragging {
+  opacity: 0.42;
+  transform: scale(0.985);
+}
+
 .task-check-wrap {
   display: grid;
   width: 24px;
@@ -797,6 +802,12 @@ button {
   font-weight: 720;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.task-copy small {
+  color: var(--text-soft);
+  font-size: 9px;
+  font-weight: 650;
 }
 
 .task-item.is-complete .task-copy strong {

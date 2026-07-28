@@ -5,6 +5,12 @@ import type { Task } from "../types";
 
 type TaskFilter = "all" | "active" | "completed";
 
+const recurrenceLabels = {
+  daily: "매일 반복",
+  weekly: "매주 반복",
+  monthly: "매월 반복",
+} as const;
+
 type TaskListProps = {
   tasks: Task[];
   listName: string;
@@ -19,6 +25,7 @@ type TaskListProps = {
   onAddTask: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
   onDeleteTask: (id: string) => Promise<boolean>;
   onOpenTask: (id: string) => void;
+  onReorderTask: (id: string, targetId: string) => Promise<boolean>;
   onRetry: () => void;
   onToggleTask: (id: string) => void;
   onSelectTask: (id: string) => void;
@@ -38,11 +45,13 @@ export function TaskList({
   onAddTask,
   onDeleteTask,
   onOpenTask,
+  onReorderTask,
   onRetry,
   onToggleTask,
   onSelectTask,
 }: TaskListProps) {
   const [filter, setFilter] = useState<TaskFilter>("all");
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const remaining = tasks.filter((task) => !task.completed).length;
   const completed = tasks.length - remaining;
   const orderedTasks = [...tasks].sort(
@@ -53,6 +62,7 @@ export function TaskList({
     if (filter === "completed") return task.completed;
     return true;
   });
+  const reorderableTasks = orderedTasks.filter((task) => !task.completed);
 
   async function handleDelete(task: Task) {
     const confirmed = window.confirm(
@@ -71,7 +81,8 @@ export function TaskList({
           <p className="eyebrow">TASKS</p>
           <h2 id="today-title">{listName}</h2>
           <p className="heading-note">
-            할 일을 선택하면 집중 타이머에 바로 연결됩니다.
+            할 일을 선택하면 집중 타이머에 연결됩니다. 끌어서 순서를
+            바꿀 수도 있어요.
           </p>
         </div>
         <span className="remaining-pill">{remaining}개 남음</span>
@@ -151,10 +162,39 @@ export function TaskList({
         {visibleTasks.map((task) => {
           const isActive = activeTaskId === task.id;
           const isPending = pendingTaskIds.has(task.id);
+          const reorderIndex = reorderableTasks.findIndex(
+            (candidate) => candidate.id === task.id,
+          );
+          const canReorder =
+            !task.completed && !isPending && !isSaving && reorderIndex >= 0;
+          const previousTask = reorderableTasks[reorderIndex - 1];
+          const nextTask = reorderableTasks[reorderIndex + 1];
           return (
             <article
-              className={`task-item ${task.completed ? "is-complete" : ""} ${isActive ? "is-active" : ""}`}
+              className={`task-item ${task.completed ? "is-complete" : ""} ${isActive ? "is-active" : ""} ${draggedTaskId === task.id ? "is-dragging" : ""}`}
               key={task.id}
+              draggable={canReorder}
+              onDragStart={(event) => {
+                setDraggedTaskId(task.id);
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", task.id);
+              }}
+              onDragEnd={() => setDraggedTaskId(null)}
+              onDragOver={(event) => {
+                if (canReorder && draggedTaskId !== task.id) {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const sourceId =
+                  draggedTaskId || event.dataTransfer.getData("text/plain");
+                setDraggedTaskId(null);
+                if (sourceId && sourceId !== task.id) {
+                  void onReorderTask(sourceId, task.id);
+                }
+              }}
             >
               <label className="task-check-wrap">
                 <input
@@ -176,9 +216,33 @@ export function TaskList({
                   aria-label={`${task.title} 집중 대상으로 선택`}
                 >
                   <strong>{task.title}</strong>
+                  {task.recurrence !== "none" && (
+                    <small>{recurrenceLabels[task.recurrence]}</small>
+                  )}
                 </button>
 
                 <div className="task-row-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      previousTask &&
+                      void onReorderTask(task.id, previousTask.id)
+                    }
+                    disabled={!canReorder || !previousTask}
+                    aria-label={`${task.title} 위로 이동`}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      nextTask && void onReorderTask(task.id, nextTask.id)
+                    }
+                    disabled={!canReorder || !nextTask}
+                    aria-label={`${task.title} 아래로 이동`}
+                  >
+                    ↓
+                  </button>
                   <button
                     type="button"
                     onClick={() => onOpenTask(task.id)}

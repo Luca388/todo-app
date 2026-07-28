@@ -1,4 +1,5 @@
 export type TaskLabel = "업무" | "개인" | "건강";
+export type TaskRecurrence = "none" | "daily" | "weekly" | "monthly";
 
 export type Task = {
   id: string;
@@ -7,6 +8,8 @@ export type Task = {
   dueAt: string | null;
   listId: string;
   label: TaskLabel;
+  recurrence: TaskRecurrence;
+  recurrenceSpawned: boolean;
   completed: boolean;
   pomodoros: number;
 };

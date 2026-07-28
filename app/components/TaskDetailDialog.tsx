@@ -2,17 +2,19 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { getDueDateKey } from "../task-dates";
-import type { Task, TodoList } from "../types";
+import type { Task, TaskRecurrence, TodoList } from "../types";
 import { CalendarDatePicker } from "./CalendarDatePicker";
 
 export type TaskDetailsUpdate = {
   dueDate: string;
   listId: string;
+  recurrence: TaskRecurrence;
   title: string;
 };
 
 type TaskDetailDialogProps = {
   canChangeList: boolean;
+  error: string | null;
   isPending: boolean;
   lists: TodoList[];
   task: Task;
@@ -23,6 +25,7 @@ type TaskDetailDialogProps = {
 
 export function TaskDetailDialog({
   canChangeList,
+  error,
   isPending,
   lists,
   task,
@@ -33,6 +36,7 @@ export function TaskDetailDialog({
   const [title, setTitle] = useState(task.title);
   const [dueDate, setDueDate] = useState(getDueDateKey(task.dueAt) ?? "");
   const [listId, setListId] = useState(task.listId);
+  const [recurrence, setRecurrence] = useState(task.recurrence);
   const [message, setMessage] = useState<string | null>(null);
 
   const effectiveListId = lists.some((list) => list.id === listId)
@@ -53,6 +57,7 @@ export function TaskDetailDialog({
     const saved = await onSave(task.id, {
       dueDate,
       listId: effectiveListId,
+      recurrence,
       title,
     });
     if (saved) {
@@ -132,14 +137,36 @@ export function TaskDetailDialog({
             disabled={isPending}
           />
 
+          <label>
+            <span>반복</span>
+            <select
+              value={recurrence}
+              onChange={(event) =>
+                setRecurrence(event.target.value as TaskRecurrence)
+              }
+              disabled={isPending}
+            >
+              <option value="none">반복 안 함</option>
+              <option value="daily">매일</option>
+              <option value="weekly">매주</option>
+              <option value="monthly">매월</option>
+            </select>
+          </label>
+
+          {recurrence !== "none" && !dueDate && (
+            <p className="task-detail-note">
+              반복 일정을 사용하려면 기준 날짜를 선택해 주세요.
+            </p>
+          )}
+
           {!canChangeList && lists.length > 1 && (
             <p className="task-detail-note">
               리스트 이동은 최신 Supabase 설정을 적용한 뒤 사용할 수 있습니다.
             </p>
           )}
-          {message && (
+          {(message || error) && (
             <p className="task-detail-error" role="alert">
-              {message}
+              {error ?? message}
             </p>
           )}
 
@@ -159,7 +186,12 @@ export function TaskDetailDialog({
             <button
               className="is-primary"
               type="submit"
-              disabled={isPending || !title.trim() || !effectiveListId}
+              disabled={
+                isPending ||
+                !title.trim() ||
+                !effectiveListId ||
+                (recurrence !== "none" && !dueDate)
+              }
             >
               {isPending ? "저장 중…" : "저장"}
             </button>

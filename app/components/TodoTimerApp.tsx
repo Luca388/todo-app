@@ -107,6 +107,7 @@ const GUEST_DATA_KEY = "haru:guest-data:v1";
 const GUEST_HABITS_KEY = "haru:guest-habits:v1";
 const GUEST_TIMER_KEY = "haru:guest-timer:v1";
 const TIMER_SETTINGS_KEY = "haru:timer-settings:v1";
+const APP_BASE_URL = import.meta.env.BASE_URL || "/";
 const DEFAULT_REPEAT_COUNT = 1;
 const MAX_REPEAT_COUNT = 99;
 const DEFAULT_SOUND_ENABLED = true;
@@ -119,6 +120,11 @@ const DEFAULT_LIST: TodoList = {
   name: "todo 리스트",
   position: 0,
 };
+
+function publicAssetPath(fileName: string) {
+  const base = APP_BASE_URL.endsWith("/") ? APP_BASE_URL : `${APP_BASE_URL}/`;
+  return `${base}${fileName.replace(/^\/+/, "")}`;
+}
 
 type TimerDurations = Record<TimerMode, number>;
 type TimerSettings = TimerDurations & {
@@ -766,8 +772,8 @@ export function TodoTimerApp() {
 
       const options: NotificationOptions = {
         body,
-        icon: "/icon-192.png",
-        badge: "/icon-192.png",
+        icon: publicAssetPath("icon-192.png"),
+        badge: publicAssetPath("icon-192.png"),
         tag,
       };
       const showFallback = () => {
@@ -1029,7 +1035,9 @@ export function TodoTimerApp() {
       process.env.NODE_ENV === "production" &&
       "serviceWorker" in navigator
     ) {
-      void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+      void navigator.serviceWorker
+        .register(publicAssetPath("sw.js"))
+        .catch(() => undefined);
     }
   }, []);
 

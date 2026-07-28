@@ -22,6 +22,7 @@ node_modules/
 .vinext/
 out/
 dist/
+dist-pages/
 .vite/
 
 # Cloudflare / deployment output

@@ -379,15 +379,63 @@ test("ships an installable offline PWA shell", async () => {
   const manifest = JSON.parse(manifestSource);
 
   assert.equal(manifest.display, "standalone");
-  assert.equal(manifest.start_url, "/");
+  assert.equal(manifest.start_url, "./");
+  assert.equal(manifest.scope, "./");
   assert.deepEqual(
     manifest.icons.map((icon) => icon.sizes),
     ["192x192", "512x512"],
   );
-  assert.match(serviceWorker, /haru-shell-v3/);
+  assert.deepEqual(
+    manifest.icons.map((icon) => icon.src),
+    ["icon-192.png", "icon-512.png"],
+  );
+  assert.match(serviceWorker, /haru-shell-v4/);
+  assert.match(serviceWorker, /const APP_ROOT = new URL\("\.\/"/);
   assert.match(serviceWorker, /request\.mode === "navigate"/);
   assert.match(serviceWorker, /notificationclick/);
   assert.match(layout, /manifest: "\/manifest\.webmanifest"/);
   assert.doesNotMatch(app, /beforeinstallprompt|앱 설치/);
-  assert.match(app, /serviceWorker\.register\("\/sw\.js"\)/);
+  assert.match(app, /\.register\(publicAssetPath\("sw\.js"\)\)/);
+  assert.match(app, /icon: publicAssetPath\("icon-192\.png"\)/);
+});
+
+test("builds and deploys a static GitHub Pages client", async () => {
+  const [
+    packageSource,
+    pagesConfig,
+    pagesHtml,
+    pagesEntry,
+    workflow,
+    gitignore,
+  ] = await Promise.all([
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../vite.pages.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../github-pages/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../github-pages/main.tsx", import.meta.url), "utf8"),
+    readFile(
+      new URL("../.github/workflows/deploy-pages.yml", import.meta.url),
+      "utf8",
+    ),
+    readFile(new URL("../.gitignore", import.meta.url), "utf8"),
+  ]);
+  const packageJson = JSON.parse(packageSource);
+
+  assert.equal(
+    packageJson.scripts["build:pages"],
+    "vite build --config vite.pages.config.ts",
+  );
+  assert.match(pagesConfig, /GITHUB_REPOSITORY/);
+  assert.match(pagesConfig, /PAGES_BASE_PATH/);
+  assert.match(pagesConfig, /NEXT_PUBLIC_SUPABASE_URL/);
+  assert.match(pagesConfig, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
+  assert.match(pagesConfig, /outDir: path\.resolve\(process\.cwd\(\), "dist-pages"\)/);
+  assert.match(pagesHtml, /%BASE_URL%manifest\.webmanifest/);
+  assert.match(pagesEntry, /createRoot\(root\)\.render\(<TodoTimerApp \/>/);
+  assert.match(workflow, /actions\/configure-pages@v5/);
+  assert.match(workflow, /actions\/upload-pages-artifact@v3/);
+  assert.match(workflow, /actions\/deploy-pages@v4/);
+  assert.match(workflow, /run: npm run lint/);
+  assert.match(workflow, /run: npm test/);
+  assert.match(workflow, /\$\{\{ vars\.NEXT_PUBLIC_SUPABASE_URL \}\}/);
+  assert.match(gitignore, /^dist-pages\/$/m);
 });

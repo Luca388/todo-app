@@ -1,10 +1,12 @@
-const CACHE_NAME = "haru-shell-v3";
+const CACHE_NAME = "haru-shell-v4";
+const APP_ROOT = new URL("./", self.location.href).href;
+const appAsset = (fileName) => new URL(fileName, APP_ROOT).href;
 const APP_SHELL = [
-  "/",
-  "/manifest.webmanifest",
-  "/favicon.svg",
-  "/icon-192.png",
-  "/icon-512.png",
+  APP_ROOT,
+  appAsset("manifest.webmanifest"),
+  appAsset("favicon.svg"),
+  appAsset("icon-192.png"),
+  appAsset("icon-512.png"),
 ];
 
 self.addEventListener("install", (event) => {
@@ -42,10 +44,12 @@ self.addEventListener("fetch", (event) => {
       fetch(request)
         .then((response) => {
           const copy = response.clone();
-          void caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
+          void caches
+            .open(CACHE_NAME)
+            .then((cache) => cache.put(APP_ROOT, copy));
           return response;
         })
-        .catch(() => caches.match("/")),
+        .catch(() => caches.match(APP_ROOT)),
     );
     return;
   }
@@ -78,7 +82,7 @@ self.addEventListener("notificationclick", (event) => {
         );
         return existingClient
           ? existingClient.focus()
-          : self.clients.openWindow("/");
+          : self.clients.openWindow(APP_ROOT);
       }),
   );
 });

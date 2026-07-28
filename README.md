@@ -65,9 +65,40 @@ Google 로그인은 Supabase Authentication에서 Provider와 Redirect URL을
 npm test
 npm run lint
 npm run build
+npm run build:pages
 ```
 
-`npm test`는 프로덕션 빌드와 핵심 기능 연결 검사를 함께 실행합니다.
+`npm test`는 서버 배포용 빌드, GitHub Pages 정적 빌드와 핵심 기능
+연결 검사를 함께 실행합니다.
+
+## GitHub Pages 배포
+
+`main` 브랜치에 푸시하면 `.github/workflows/deploy-pages.yml`이
+`https://luca388.github.io/todo-app/`에 배포합니다. 저장소 이름을
+기준으로 `/todo-app/` 경로가 자동 적용되므로 별도 base path 수정은
+필요하지 않습니다.
+
+첫 푸시 전에 GitHub 저장소에서 다음 항목만 설정합니다.
+
+1. **Settings → Secrets and variables → Actions → Variables**에서 아래
+   Repository variable 두 개를 추가합니다.
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+2. **Settings → Pages → Build and deployment → Source**를
+   **GitHub Actions**로 선택합니다.
+3. Supabase의 **Authentication → URL Configuration → Redirect URLs**에
+   `https://luca388.github.io/todo-app/**`를 추가합니다. 기존 배포 주소를
+   Site URL로 사용 중이라면 그대로 유지해도 됩니다.
+
+로컬에서 Pages 하위 경로를 포함해 확인하려면 다음 명령을 사용합니다.
+
+```bash
+PAGES_BASE_PATH=/todo-app/ npm run build:pages
+```
+
+`dist-pages`에 `index.html`과 정적 자산이 만들어지면 정상입니다.
+Publishable key는 브라우저 공개용 값이므로 GitHub Variable에 넣어도
+되지만 `service_role` 키는 절대로 등록하지 마세요.
 
 ## 데이터와 보안
 

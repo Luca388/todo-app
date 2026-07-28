@@ -115,9 +115,9 @@ http://localhost:3000/**
 
 ## 8. 배포
 
-- [ ] 최종 프론트 구조가 GitHub Pages 정적 배포에 맞는지 확인
-- [ ] 저장소 하위 경로에 맞게 base path 설정
-- [ ] GitHub Actions 배포 작업 작성
+- [x] 최종 프론트 구조가 GitHub Pages 정적 배포에 맞는지 확인
+- [x] 저장소 하위 경로에 맞게 base path 설정
+- [x] GitHub Actions 배포 작업 작성
 - [ ] GitHub Pages 첫 배포
 - [ ] Supabase Site URL과 Redirect URL에 실제 주소 반영
 - [ ] 모바일과 데스크톱에서 배포 화면 확인

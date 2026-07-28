@@ -40,6 +40,7 @@ import {
   type TodoRow,
 } from "../../lib/supabase";
 import { defaultTimerDurations, initialTasks } from "../data";
+import { getErrorMessage } from "../error-message";
 import {
   dueAtFromDateInput,
 } from "../task-dates";
@@ -59,11 +60,6 @@ import {
   type TaskDetailsUpdate,
 } from "./TaskDetailDialog";
 import { TaskList } from "./TaskList";
-
-function getAuthErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
-  return "인증 중 알 수 없는 오류가 발생했습니다.";
-}
 
 function getUserDisplayName(user: User) {
   const metadataName = user.user_metadata.full_name ?? user.user_metadata.name;
@@ -1039,7 +1035,7 @@ export function TodoTimerApp() {
         if (mounted) applyUser(session?.user ?? null);
       })
       .catch((error: unknown) => {
-        if (mounted) setAuthError(getAuthErrorMessage(error));
+        if (mounted) setAuthError(getErrorMessage(error));
       })
       .finally(() => {
         if (mounted) setAuthReady(true);
@@ -1236,7 +1232,7 @@ export function TodoTimerApp() {
       } catch (error) {
         if (!mounted) return;
         guestMigrationUser.current = null;
-        const message = getAuthErrorMessage(error);
+        const message = getErrorMessage(error);
         setRemoteTodos({
           ownerId,
           tasks: [],
@@ -1316,7 +1312,7 @@ export function TodoTimerApp() {
         });
       } else {
         setRemoteFocusHistory([]);
-        setPomodoroError(getAuthErrorMessage(recentResult.reason));
+        setPomodoroError(getErrorMessage(recentResult.reason));
       }
 
       if (activeResult.status === "fulfilled") {
@@ -1340,7 +1336,7 @@ export function TodoTimerApp() {
       } else {
         setActivePomodoro(null);
         setIsRunning(false);
-        setPomodoroError(getAuthErrorMessage(activeResult.reason));
+        setPomodoroError(getErrorMessage(activeResult.reason));
       }
     });
 
@@ -1434,7 +1430,7 @@ export function TodoTimerApp() {
               remainingSnapshot.current = timerDurations.focus;
             })
             .catch((error: unknown) => {
-              setPomodoroError(getAuthErrorMessage(error));
+              setPomodoroError(getErrorMessage(error));
             })
             .finally(() => {
               setPomodoroPending(false);
@@ -1647,7 +1643,7 @@ export function TodoTimerApp() {
             : candidate,
         ),
       );
-      setTodoActionError(getAuthErrorMessage(error));
+      setTodoActionError(getErrorMessage(error));
     } finally {
       setPendingTodoIds((current) => {
         const next = new Set(current);
@@ -1713,7 +1709,7 @@ export function TodoTimerApp() {
       }
       return true;
     } catch (error) {
-      setTodoActionError(getAuthErrorMessage(error));
+      setTodoActionError(getErrorMessage(error));
       return false;
     } finally {
       setTodoSaving(false);
@@ -1814,7 +1810,7 @@ export function TodoTimerApp() {
       }
       return true;
     } catch (error) {
-      setTodoActionError(getAuthErrorMessage(error));
+      setTodoActionError(getErrorMessage(error));
       return false;
     } finally {
       setPendingTodoIds((current) => {
@@ -1891,7 +1887,7 @@ export function TodoTimerApp() {
       setActiveTaskId(null);
       return true;
     } catch (error) {
-      setTodoActionError(getAuthErrorMessage(error));
+      setTodoActionError(getErrorMessage(error));
       return false;
     }
   }
@@ -1930,7 +1926,7 @@ export function TodoTimerApp() {
       );
       return true;
     } catch (error) {
-      setTodoActionError(getAuthErrorMessage(error));
+      setTodoActionError(getErrorMessage(error));
       return false;
     }
   }
@@ -1972,7 +1968,7 @@ export function TodoTimerApp() {
             : current,
         );
       } catch (error) {
-        setTodoActionError(getAuthErrorMessage(error));
+        setTodoActionError(getErrorMessage(error));
         return false;
       }
     }
@@ -2011,7 +2007,7 @@ export function TodoTimerApp() {
           current.filter((candidate) => candidate.id !== id),
         );
       } catch (error) {
-        setTodoActionError(getAuthErrorMessage(error));
+        setTodoActionError(getErrorMessage(error));
         return false;
       } finally {
         setPendingTodoIds((current) => {
@@ -2085,7 +2081,7 @@ export function TodoTimerApp() {
       } catch (error) {
         remainingSnapshot.current = remainingSeconds;
         setIsRunning(true);
-        setPomodoroError(getAuthErrorMessage(error));
+        setPomodoroError(getErrorMessage(error));
       } finally {
         setPomodoroPending(false);
       }
@@ -2120,7 +2116,7 @@ export function TodoTimerApp() {
         setIsRunning(true);
         broadcastPomodoroChange();
       } catch (error) {
-        setPomodoroError(getAuthErrorMessage(error));
+        setPomodoroError(getErrorMessage(error));
       } finally {
         setPomodoroPending(false);
       }
@@ -2167,7 +2163,7 @@ export function TodoTimerApp() {
       setIsRunning(started.status === "running");
       broadcastPomodoroChange();
     } catch (error) {
-      setPomodoroError(getAuthErrorMessage(error));
+      setPomodoroError(getErrorMessage(error));
     } finally {
       setPomodoroPending(false);
     }
@@ -2205,7 +2201,7 @@ export function TodoTimerApp() {
       remainingSnapshot.current = timerDurations[mode];
       broadcastPomodoroChange();
     } catch (error) {
-      setPomodoroError(getAuthErrorMessage(error));
+      setPomodoroError(getErrorMessage(error));
     } finally {
       setPomodoroPending(false);
     }
@@ -2259,7 +2255,7 @@ export function TodoTimerApp() {
     } catch (error) {
       remainingSnapshot.current = remainingSeconds;
       setIsRunning(wasRunning);
-      setPomodoroError(getAuthErrorMessage(error));
+      setPomodoroError(getErrorMessage(error));
     } finally {
       setPomodoroPending(false);
     }
@@ -2316,7 +2312,7 @@ export function TodoTimerApp() {
         await signInWithGoogle();
       }
     } catch (error) {
-      setAuthError(getAuthErrorMessage(error));
+      setAuthError(getErrorMessage(error));
       setAuthPending(false);
     }
   }

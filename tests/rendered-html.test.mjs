@@ -6,6 +6,7 @@ import {
   getDueDateKey,
   getTaskDateStatus,
 } from "../app/task-dates.ts";
+import { getErrorMessage } from "../app/error-message.ts";
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -55,6 +56,21 @@ test("stores and classifies task dates without timezone drift", () => {
   assert.equal(getTaskDateStatus(dueAt, "2026-07-27"), "today");
   assert.equal(getTaskDateStatus(dueAt, "2026-07-28"), "overdue");
   assert.equal(getTaskDateStatus(dueAt, "2026-07-26"), "upcoming");
+});
+
+test("shows the real Supabase error instead of a generic auth message", () => {
+  assert.equal(
+    getErrorMessage({
+      code: "42501",
+      details: "The selected list does not belong to this user.",
+      message: "new row violates row-level security policy",
+    }),
+    "new row violates row-level security policy (오류 코드: 42501 · The selected list does not belong to this user.)",
+  );
+  assert.equal(
+    getErrorMessage(null),
+    "알 수 없는 오류가 발생했습니다.",
+  );
 });
 
 test("wires the Supabase auth lifecycle to desktop and mobile controls", async () => {

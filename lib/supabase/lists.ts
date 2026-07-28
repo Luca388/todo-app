@@ -46,7 +46,7 @@ export async function createTodoList(input: {
   if (!name) throw new Error("리스트 이름을 입력해 주세요.");
 
   const payload: TodoListInsert = {
-    id: input.id,
+    id: input.id ?? window.crypto.randomUUID(),
     user_id: user.id,
     name,
     position: input.position ?? 0,

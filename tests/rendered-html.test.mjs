@@ -105,6 +105,7 @@ test("wires todo lists and the calendar to Supabase with visible request states"
     listRail,
     calendar,
     lists,
+    todos,
     migration,
   ] = await Promise.all([
       readFile(
@@ -129,6 +130,7 @@ test("wires todo lists and the calendar to Supabase with visible request states"
         "utf8",
       ),
       readFile(new URL("../lib/supabase/lists.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/supabase/todos.ts", import.meta.url), "utf8"),
       readFile(
         new URL(
           "../supabase/migrations/202607270002_todo_lists_and_completion_dates.sql",
@@ -185,6 +187,8 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.match(app, /list_id: update\.listId/);
   assert.match(lists, /DEFAULT_TODO_LIST_NAME = "todo 리스트"/);
   assert.match(lists, /isTodoListsSchemaMissing/);
+  assert.match(todos, /id: input\.id \?\? window\.crypto\.randomUUID\(\)/);
+  assert.match(lists, /id: input\.id \?\? window\.crypto\.randomUUID\(\)/);
   assert.match(migration, /create table public\.todo_lists/);
   assert.match(migration, /add column list_id/);
   assert.match(migration, /add column completed_at/);
@@ -192,7 +196,8 @@ test("wires todo lists and the calendar to Supabase with visible request states"
 });
 
 test("persists and restores the Pomodoro session lifecycle", async () => {
-  const [app, timer, pomodoro, migration] = await Promise.all([
+  const [app, timer, pomodoro, migration, uuidDefaultMigration] =
+    await Promise.all([
     readFile(
       new URL("../app/components/TodoTimerApp.tsx", import.meta.url),
       "utf8",
@@ -208,6 +213,13 @@ test("persists and restores the Pomodoro session lifecycle", async () => {
     readFile(
       new URL(
         "../supabase/migrations/202607270001_pomodoro_pause_state.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readFile(
+      new URL(
+        "../supabase/migrations/202607280001_restore_uuid_defaults.sql",
         import.meta.url,
       ),
       "utf8",
@@ -232,8 +244,21 @@ test("persists and restores the Pomodoro session lifecycle", async () => {
   assert.match(app, /if \(!shouldAutoStart\) return/);
   assert.match(app, /browserNotificationsEnabled/);
   assert.match(app, /new BroadcastChannel\("haru-pomodoro"\)/);
+  assert.match(pomodoro, /id: window\.crypto\.randomUUID\(\)/);
   assert.match(pomodoro, /last_resumed_at/);
   assert.match(migration, /status in \('running', 'paused'\)/);
+  assert.match(
+    uuidDefaultMigration,
+    /alter table public\.todos[\s\S]*alter column id set default gen_random_uuid\(\)/,
+  );
+  assert.match(
+    uuidDefaultMigration,
+    /alter table public\.todo_lists[\s\S]*alter column id set default gen_random_uuid\(\)/,
+  );
+  assert.match(
+    uuidDefaultMigration,
+    /alter table public\.pomodoro_sessions[\s\S]*alter column id set default gen_random_uuid\(\)/,
+  );
   assert.match(timer, /일시정지됨/);
   assert.match(timer, /실행 중인 세션 취소/);
   assert.match(timer, /다시 시도/);

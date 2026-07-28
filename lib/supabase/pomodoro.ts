@@ -65,6 +65,7 @@ export async function startPomodoro(
   const user = await requireCurrentUser();
   const resumedAt = new Date().toISOString();
   const payload: PomodoroSessionInsert = {
+    id: window.crypto.randomUUID(),
     user_id: user.id,
     todo_id: input.todoId ?? null,
     mode: input.mode,

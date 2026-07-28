@@ -48,7 +48,7 @@ export async function createTodos(
     if (!title) throw new Error("할 일 제목을 입력해 주세요.");
 
     return {
-      id: input.id,
+      id: input.id ?? window.crypto.randomUUID(),
       user_id: user.id,
       title,
       label: input.label ?? "personal",

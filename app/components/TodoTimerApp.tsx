@@ -15,10 +15,9 @@ import {
   createTodo,
   createTodoList,
   createTodos,
-  deleteTodo,
   deleteTodoList,
+  deleteTodos,
   ensureDefaultTodoList,
-  completeRecurringTodo,
   getActivePomodoro,
   getCurrentSession,
   importCompletedPomodoros,
@@ -45,15 +44,12 @@ import { defaultTimerDurations, initialTasks } from "../data";
 import { getErrorMessage } from "../error-message";
 import {
   dueAtFromDateInput,
-  getDueDateKey,
   getLocalDateKey,
-  getNextRecurringDateKey,
 } from "../task-dates";
 import type {
   FocusHistoryEntry,
   Task,
   TaskLabel,
-  TaskRecurrence,
   TimerMode,
   TodoList,
 } from "../types";
@@ -139,15 +135,6 @@ type GuestTimerSession = {
   taskId: string | null;
 };
 
-function isTaskRecurrence(value: unknown): value is TaskRecurrence {
-  return (
-    value === "none" ||
-    value === "daily" ||
-    value === "weekly" ||
-    value === "monthly"
-  );
-}
-
 function isTask(value: unknown): value is Task {
   if (!value || typeof value !== "object") return false;
   const task = value as Partial<Task>;
@@ -164,9 +151,6 @@ function isTask(value: unknown): value is Task {
     (task.label === "업무" ||
       task.label === "개인" ||
       task.label === "건강") &&
-    (task.recurrence === undefined || isTaskRecurrence(task.recurrence)) &&
-    (task.recurrenceSpawned === undefined ||
-      typeof task.recurrenceSpawned === "boolean") &&
     typeof task.completed === "boolean" &&
     typeof task.pomodoros === "number" &&
     Number.isFinite(task.pomodoros)
@@ -218,10 +202,6 @@ function readGuestData() {
             availableListIds.has(task.listId)
               ? task.listId
               : fallbackListId,
-          recurrence: isTaskRecurrence(task.recurrence)
-            ? task.recurrence
-            : "none",
-          recurrenceSpawned: task.recurrenceSpawned === true,
         }))
       : initialTasks;
     const sessions = Array.isArray(parsed.sessions)
@@ -371,8 +351,6 @@ function todoRowToTask(todo: TodoRow): Task {
     dueAt: todo.due_at,
     listId: todo.list_id ?? REMOTE_FALLBACK_LIST_ID,
     label: taskLabels[todo.label],
-    recurrence: todo.recurrence ?? "none",
-    recurrenceSpawned: todo.recurrence_spawned ?? false,
     completed: todo.completed,
     pomodoros: 0,
   };
@@ -1138,7 +1116,6 @@ export function TodoTimerApp() {
               todo.label,
               todo.completed,
               todo.due_at,
-              todo.recurrence ?? "none",
               schemaAvailable
                 ? (todo.list_id ?? nextLists[0].id)
                 : REMOTE_FALLBACK_LIST_ID,
@@ -1158,7 +1135,6 @@ export function TodoTimerApp() {
               label,
               task.completed,
               task.dueAt,
-              task.recurrence,
               listId,
             ].join("\u0000");
             const matchingIds = availableTodos.get(key);
@@ -1185,12 +1161,6 @@ export function TodoTimerApp() {
                   : {}),
                 dueAt: task.dueAt,
                 position: todos.length + index,
-                ...(task.recurrence !== "none"
-                  ? {
-                      recurrence: task.recurrence,
-                      recurrenceSpawned: task.recurrenceSpawned,
-                    }
-                  : {}),
               },
             ];
           });
@@ -1620,43 +1590,12 @@ export function TodoTimerApp() {
 
     const completed = !task.completed;
     const completedAt = completed ? new Date().toISOString() : null;
-    const nextRecurringDateKey =
-      completed &&
-      task.recurrence !== "none" &&
-      !task.recurrenceSpawned
-        ? getNextRecurringDateKey(
-            getDueDateKey(task.dueAt) ?? "",
-            task.recurrence,
-          )
-        : null;
-    const nextRecurringTask: Task | null = nextRecurringDateKey
-      ? {
-          id: window.crypto.randomUUID(),
-          title: task.title,
-          completedAt: null,
-          dueAt: dueAtFromDateInput(nextRecurringDateKey),
-          listId: task.listId,
-          label: task.label,
-          recurrence: task.recurrence,
-          recurrenceSpawned: false,
-          completed: false,
-          pomodoros: 0,
-        }
-      : null;
     updateVisibleTasks((current) =>
-      current.flatMap((candidate) => {
-        if (candidate.id !== id) return [candidate];
-        const updatedTask = {
-          ...candidate,
-          completed,
-          completedAt,
-          recurrenceSpawned:
-            candidate.recurrenceSpawned || Boolean(nextRecurringTask),
-        };
-        return !authUserId && nextRecurringTask
-          ? [updatedTask, nextRecurringTask]
-          : [updatedTask];
-      }),
+      current.map((candidate) =>
+        candidate.id === id
+          ? { ...candidate, completed, completedAt }
+          : candidate,
+      ),
     );
 
     if (completed && activeTaskId === id) {
@@ -1670,72 +1609,35 @@ export function TodoTimerApp() {
     setPendingTodoIds((current) => new Set(current).add(id));
 
     try {
-      if (completed && task.recurrence !== "none") {
-        const updatedRows = await completeRecurringTodo(id);
-        if (updatedRows.length === 0) {
-          throw new Error("반복 할 일을 완료하지 못했습니다.");
-        }
-        const returnedTasks = updatedRows.map((row) => {
-          const returnedTask = todoRowToTask(row);
-          return listSchemaAvailable
-            ? returnedTask
-            : { ...returnedTask, listId: REMOTE_FALLBACK_LIST_ID };
-        });
-        const returnedById = new Map(
-          returnedTasks.map((returnedTask) => [
-            returnedTask.id,
-            returnedTask,
-          ]),
-        );
-        updateVisibleTasks((current) => {
-          const next = current.map(
-            (candidate) => returnedById.get(candidate.id) ?? candidate,
-          );
-          const currentIds = new Set(current.map((candidate) => candidate.id));
-          return [
-            ...next,
-            ...returnedTasks.filter(
-              (returnedTask) => !currentIds.has(returnedTask.id),
-            ),
-          ];
-        });
-      } else {
-        const updated = await setTodoCompleted(
-          id,
-          completed,
-          listSchemaAvailable,
-        );
-        updateVisibleTasks((current) =>
-          current.map((candidate) =>
-            candidate.id === id
-              ? {
-                  ...candidate,
-                  completed: updated.completed,
-                  completedAt: listSchemaAvailable
-                    ? updated.completed_at
-                    : completedAt,
-                  recurrenceSpawned:
-                    updated.recurrence_spawned ??
-                    candidate.recurrenceSpawned,
-                }
-              : candidate,
-          ),
-        );
-      }
+      const updated = await setTodoCompleted(
+        id,
+        completed,
+        listSchemaAvailable,
+      );
+      updateVisibleTasks((current) =>
+        current.map((candidate) =>
+          candidate.id === id
+            ? {
+                ...candidate,
+                completed: updated.completed,
+                completedAt: listSchemaAvailable
+                  ? updated.completed_at
+                  : completedAt,
+              }
+            : candidate,
+        ),
+      );
     } catch (error) {
       updateVisibleTasks((current) =>
-        current
-          .filter((candidate) => candidate.id !== nextRecurringTask?.id)
-          .map((candidate) =>
-            candidate.id === id
-              ? {
-                  ...candidate,
-                  completed: task.completed,
-                  completedAt: task.completedAt,
-                  recurrenceSpawned: task.recurrenceSpawned,
-                }
-              : candidate,
-          ),
+        current.map((candidate) =>
+          candidate.id === id
+            ? {
+                ...candidate,
+                completed: task.completed,
+                completedAt: task.completedAt,
+              }
+            : candidate,
+        ),
       );
       setTodoActionError(getErrorMessage(error));
     } finally {
@@ -1771,8 +1673,6 @@ export function TodoTimerApp() {
           dueAt,
           listId,
           label: "개인",
-          recurrence: "none",
-          recurrenceSpawned: false,
           completed: false,
           pomodoros: 0,
       };
@@ -1866,7 +1766,6 @@ export function TodoTimerApp() {
                 ...candidate,
                 dueAt: nextDueAt,
                 listId: update.listId,
-                recurrence: update.recurrence,
                 title: nextTitle,
               }
             : candidate,
@@ -1885,10 +1784,6 @@ export function TodoTimerApp() {
       const updated = await updateTodo(id, {
         due_at: nextDueAt,
         ...(listSchemaAvailable ? { list_id: update.listId } : {}),
-        ...(task.recurrence !== update.recurrence ||
-        update.recurrence !== "none"
-          ? { recurrence: update.recurrence }
-          : {}),
         title: nextTitle,
       });
       updateVisibleTasks((current) =>
@@ -1900,10 +1795,6 @@ export function TodoTimerApp() {
                 listId: listSchemaAvailable
                   ? (updated.list_id ?? update.listId)
                   : candidate.listId,
-                recurrence: updated.recurrence ?? update.recurrence,
-                recurrenceSpawned:
-                  updated.recurrence_spawned ??
-                  candidate.recurrenceSpawned,
                 title: updated.title,
               }
             : candidate,
@@ -2085,30 +1976,41 @@ export function TodoTimerApp() {
     return true;
   }
 
-  async function handleDeleteTask(id: string) {
-    const task = allTasks.find((candidate) => candidate.id === id);
-    if (!task || pendingTodoIds.has(id)) return false;
+  async function handleDeleteTasks(ids: string[]) {
+    const uniqueIds = [...new Set(ids)];
+    const idSet = new Set(uniqueIds);
+    const selectedTasks = allTasks.filter((task) => idSet.has(task.id));
     if (
-      hasActiveTimerSession &&
-      mode === "focus" &&
-      activeTaskId === id
+      uniqueIds.length === 0 ||
+      selectedTasks.length !== uniqueIds.length ||
+      selectedTasks.some((task) => pendingTodoIds.has(task.id)) ||
+      todoSaving
     ) {
+      return false;
+    }
+    if (hasActiveTimerSession && activeTaskId && idSet.has(activeTaskId)) {
       setTodoActionError("실행 중인 포모도로를 먼저 완료하거나 취소해 주세요.");
       return false;
     }
 
+    setTodoSaving(true);
+    setTodoActionError(null);
+
     if (!authUserId) {
       setGuestTasks((current) =>
-        current.filter((candidate) => candidate.id !== id),
+        current.filter((candidate) => !idSet.has(candidate.id)),
       );
     } else {
-      setTodoActionError(null);
-      setPendingTodoIds((current) => new Set(current).add(id));
+      setPendingTodoIds((current) => {
+        const next = new Set(current);
+        uniqueIds.forEach((id) => next.add(id));
+        return next;
+      });
 
       try {
-        await deleteTodo(id);
+        await deleteTodos(uniqueIds);
         updateVisibleTasks((current) =>
-          current.filter((candidate) => candidate.id !== id),
+          current.filter((candidate) => !idSet.has(candidate.id)),
         );
       } catch (error) {
         setTodoActionError(getErrorMessage(error));
@@ -2116,23 +2018,33 @@ export function TodoTimerApp() {
       } finally {
         setPendingTodoIds((current) => {
           const next = new Set(current);
-          next.delete(id);
+          uniqueIds.forEach((id) => next.delete(id));
           return next;
         });
+        setTodoSaving(false);
       }
     }
 
-    if (activeTaskId === id) {
+    if (activeTaskId && idSet.has(activeTaskId)) {
       setActiveTaskId(
-        tasks.find((candidate) => candidate.id !== id && !candidate.completed)
-          ?.id ?? null,
+        tasks.find(
+          (candidate) => !idSet.has(candidate.id) && !candidate.completed,
+        )?.id ?? null,
       );
       setIsRunning(false);
       setRemainingSeconds(timerDurations[mode]);
       remainingSnapshot.current = timerDurations[mode];
     }
+    if (detailTaskId && idSet.has(detailTaskId)) {
+      setDetailTaskId(null);
+    }
 
+    setTodoSaving(false);
     return true;
+  }
+
+  function handleDeleteTask(id: string) {
+    return handleDeleteTasks([id]);
   }
 
   async function handleReorderTask(id: string, targetId: string) {
@@ -2598,7 +2510,7 @@ export function TodoTimerApp() {
             newTask={newTask}
             onNewTaskChange={setNewTask}
             onAddTask={handleAddTask}
-            onDeleteTask={handleDeleteTask}
+            onDeleteTasks={handleDeleteTasks}
             onOpenTask={setDetailTaskId}
             onReorderTask={handleReorderTask}
             onRetry={handleRetryTodos}

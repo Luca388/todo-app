@@ -38,28 +38,3 @@ export function formatDateKey(dateKey: string) {
     weekday: "short",
   }).format(date);
 }
-
-export function getNextRecurringDateKey(
-  dateKey: string,
-  recurrence: "daily" | "weekly" | "monthly",
-) {
-  if (!DATE_KEY_PATTERN.test(dateKey)) return null;
-  const [year, month, day] = dateKey.split("-").map(Number);
-  const date = new Date(year, month - 1, day, 12);
-
-  if (recurrence === "daily") {
-    date.setDate(date.getDate() + 1);
-  } else if (recurrence === "weekly") {
-    date.setDate(date.getDate() + 7);
-  } else {
-    const nextMonthStart = new Date(year, month, 1, 12);
-    const lastDayOfNextMonth = new Date(year, month + 1, 0, 12).getDate();
-    date.setFullYear(
-      nextMonthStart.getFullYear(),
-      nextMonthStart.getMonth(),
-      Math.min(day, lastDayOfNextMonth),
-    );
-  }
-
-  return getLocalDateKey(date);
-}

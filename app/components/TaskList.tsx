@@ -5,12 +5,6 @@ import type { Task } from "../types";
 
 type TaskFilter = "all" | "active" | "completed";
 
-const recurrenceLabels = {
-  daily: "매일 반복",
-  weekly: "매주 반복",
-  monthly: "매월 반복",
-} as const;
-
 type TaskListProps = {
   tasks: Task[];
   listName: string;
@@ -23,7 +17,7 @@ type TaskListProps = {
   newTask: string;
   onNewTaskChange: (value: string) => void;
   onAddTask: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
-  onDeleteTask: (id: string) => Promise<boolean>;
+  onDeleteTasks: (ids: string[]) => Promise<boolean>;
   onOpenTask: (id: string) => void;
   onReorderTask: (id: string, targetId: string) => Promise<boolean>;
   onRetry: () => void;
@@ -43,7 +37,7 @@ export function TaskList({
   newTask,
   onNewTaskChange,
   onAddTask,
-  onDeleteTask,
+  onDeleteTasks,
   onOpenTask,
   onReorderTask,
   onRetry,
@@ -52,6 +46,10 @@ export function TaskList({
 }: TaskListProps) {
   const [filter, setFilter] = useState<TaskFilter>("all");
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [isDeleteMode, setIsDeleteMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const remaining = tasks.filter((task) => !task.completed).length;
   const completed = tasks.length - remaining;
   const orderedTasks = [...tasks].sort(
@@ -63,15 +61,44 @@ export function TaskList({
     return true;
   });
   const reorderableTasks = orderedTasks.filter((task) => !task.completed);
+  const selectedIds = [...selectedTaskIds].filter((id) =>
+    tasks.some((task) => task.id === id),
+  );
 
-  async function handleDelete(task: Task) {
+  function changeFilter(nextFilter: TaskFilter) {
+    setFilter(nextFilter);
+    setSelectedTaskIds(new Set());
+  }
+
+  function toggleDeleteSelection(id: string) {
+    setSelectedTaskIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function closeDeleteMode() {
+    setIsDeleteMode(false);
+    setSelectedTaskIds(new Set());
+  }
+
+  async function handleBulkDelete() {
+    if (!isDeleteMode) {
+      setIsDeleteMode(true);
+      setSelectedTaskIds(new Set());
+      return;
+    }
+    if (selectedIds.length === 0) return;
+
     const confirmed = window.confirm(
-      `"${task.title}" 할 일을 삭제할까요? 이 작업은 되돌릴 수 없습니다.`,
+      `선택한 할 일 ${selectedIds.length}개를 삭제할까요? 이 작업은 되돌릴 수 없습니다.`,
     );
     if (!confirmed) return;
 
-    const deleted = await onDeleteTask(task.id);
-    return deleted;
+    const deleted = await onDeleteTasks(selectedIds);
+    if (deleted) closeDeleteMode();
   }
 
   return (
@@ -109,23 +136,47 @@ export function TaskList({
           <button
             className={filter === "all" ? "is-active" : ""}
             type="button"
-            onClick={() => setFilter("all")}
+            onClick={() => changeFilter("all")}
           >
             전체 <span>{tasks.length}</span>
           </button>
           <button
             className={filter === "active" ? "is-active" : ""}
             type="button"
-            onClick={() => setFilter("active")}
+            onClick={() => changeFilter("active")}
           >
             미완료 <span>{remaining}</span>
           </button>
           <button
             className={filter === "completed" ? "is-active" : ""}
             type="button"
-            onClick={() => setFilter("completed")}
+            onClick={() => changeFilter("completed")}
           >
             완료 <span>{completed}</span>
+          </button>
+        </div>
+        <div className="task-bulk-actions">
+          {isDeleteMode && (
+            <button
+              type="button"
+              onClick={closeDeleteMode}
+              disabled={isSaving}
+            >
+              취소
+            </button>
+          )}
+          <button
+            className="is-danger"
+            type="button"
+            onClick={() => void handleBulkDelete()}
+            disabled={
+              isLoading ||
+              isSaving ||
+              tasks.length === 0 ||
+              (isDeleteMode && selectedIds.length === 0)
+            }
+          >
+            {isDeleteMode ? `선택 삭제 ${selectedIds.length}` : "삭제"}
           </button>
         </div>
       </div>
@@ -162,16 +213,22 @@ export function TaskList({
         {visibleTasks.map((task) => {
           const isActive = activeTaskId === task.id;
           const isPending = pendingTaskIds.has(task.id);
+          const isDeleteSelected = selectedTaskIds.has(task.id);
+          const deletionBlocked = isPending || (focusLocked && isActive);
           const reorderIndex = reorderableTasks.findIndex(
             (candidate) => candidate.id === task.id,
           );
           const canReorder =
-            !task.completed && !isPending && !isSaving && reorderIndex >= 0;
+            !isDeleteMode &&
+            !task.completed &&
+            !isPending &&
+            !isSaving &&
+            reorderIndex >= 0;
           const previousTask = reorderableTasks[reorderIndex - 1];
           const nextTask = reorderableTasks[reorderIndex + 1];
           return (
             <article
-              className={`task-item ${task.completed ? "is-complete" : ""} ${isActive ? "is-active" : ""} ${draggedTaskId === task.id ? "is-dragging" : ""}`}
+              className={`task-item ${task.completed ? "is-complete" : ""} ${isActive ? "is-active" : ""} ${draggedTaskId === task.id ? "is-dragging" : ""} ${isDeleteMode ? "is-delete-mode" : ""} ${isDeleteSelected ? "is-delete-selected" : ""}`}
               key={task.id}
               draggable={canReorder}
               onDragStart={(event) => {
@@ -196,32 +253,54 @@ export function TaskList({
                 }
               }}
             >
-              <label className="task-check-wrap">
-                <input
-                  type="checkbox"
-                  checked={task.completed}
-                  onChange={() => onToggleTask(task.id)}
-                  disabled={isPending || (focusLocked && isActive)}
-                />
-                <span className="custom-check" aria-hidden="true">✓</span>
-                <span className="sr-only">{task.title} 완료</span>
-              </label>
+              {isDeleteMode ? (
+                <label className="task-check-wrap is-delete-select">
+                  <input
+                    type="checkbox"
+                    checked={isDeleteSelected}
+                    onChange={() => toggleDeleteSelection(task.id)}
+                    disabled={deletionBlocked}
+                  />
+                  <span className="custom-check" aria-hidden="true">✓</span>
+                  <span className="sr-only">{task.title} 삭제 선택</span>
+                </label>
+              ) : (
+                <label className="task-check-wrap">
+                  <input
+                    type="checkbox"
+                    checked={task.completed}
+                    onChange={() => onToggleTask(task.id)}
+                    disabled={deletionBlocked}
+                  />
+                  <span className="custom-check" aria-hidden="true">✓</span>
+                  <span className="sr-only">{task.title} 완료</span>
+                </label>
+              )}
 
               <>
                 <button
                   className="task-copy"
                   type="button"
-                  onClick={() => onSelectTask(task.id)}
-                  disabled={task.completed || isPending || focusLocked}
-                  aria-label={`${task.title} 집중 대상으로 선택`}
+                  onClick={() =>
+                    isDeleteMode
+                      ? toggleDeleteSelection(task.id)
+                      : onSelectTask(task.id)
+                  }
+                  disabled={
+                    isDeleteMode
+                      ? deletionBlocked
+                      : task.completed || isPending || focusLocked
+                  }
+                  aria-label={
+                    isDeleteMode
+                      ? `${task.title} 삭제 선택`
+                      : `${task.title} 집중 대상으로 선택`
+                  }
                 >
                   <strong>{task.title}</strong>
-                  {task.recurrence !== "none" && (
-                    <small>{recurrenceLabels[task.recurrence]}</small>
-                  )}
                 </button>
 
-                <div className="task-row-actions">
+                {!isDeleteMode && <div className="task-row-actions">
                   <button
                     type="button"
                     onClick={() =>
@@ -251,17 +330,9 @@ export function TaskList({
                   >
                     상세
                   </button>
-                  <button
-                    className="is-danger"
-                    type="button"
-                    onClick={() => handleDelete(task)}
-                    disabled={isPending || (focusLocked && isActive)}
-                  >
-                    삭제
-                  </button>
-                </div>
+                </div>}
 
-                <button
+                {!isDeleteMode && <button
                   className={`focus-task-button ${isActive ? "is-selected" : ""}`}
                   type="button"
                   onClick={() => onSelectTask(task.id)}
@@ -274,7 +345,7 @@ export function TaskList({
                       : "선택됨"
                     : "집중"}
                   <span aria-hidden="true">{isActive ? "●" : "▶"}</span>
-                </button>
+                </button>}
               </>
             </article>
           );

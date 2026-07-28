@@ -18,8 +18,6 @@ export type CreateTodoInput = {
   dueAt?: string | null;
   listId?: string;
   position?: number;
-  recurrence?: "none" | "daily" | "weekly" | "monthly";
-  recurrenceSpawned?: boolean;
 };
 
 export async function listTodos(): Promise<TodoRow[]> {
@@ -60,10 +58,6 @@ export async function createTodos(
       due_at: input.dueAt ?? null,
       ...(input.listId ? { list_id: input.listId } : {}),
       position: input.position ?? 0,
-      ...(input.recurrence ? { recurrence: input.recurrence } : {}),
-      ...(typeof input.recurrenceSpawned === "boolean"
-        ? { recurrence_spawned: input.recurrenceSpawned }
-        : {}),
     };
   });
 
@@ -108,17 +102,6 @@ export function setTodoCompleted(
   });
 }
 
-export async function completeRecurringTodo(id: string): Promise<TodoRow[]> {
-  await requireCurrentUser();
-  const { data, error } = await getSupabaseBrowserClient().rpc(
-    "complete_recurring_todo",
-    { target_todo_id: id },
-  );
-
-  if (error) throw error;
-  return data;
-}
-
 export async function reorderTodos(ids: string[]): Promise<void> {
   const user = await requireCurrentUser();
   const client = getSupabaseBrowserClient();
@@ -136,11 +119,16 @@ export async function reorderTodos(ids: string[]): Promise<void> {
 }
 
 export async function deleteTodo(id: string): Promise<void> {
+  return deleteTodos([id]);
+}
+
+export async function deleteTodos(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
   const user = await requireCurrentUser();
   const { error } = await getSupabaseBrowserClient()
     .from("todos")
     .delete()
-    .eq("id", id)
+    .in("id", ids)
     .eq("user_id", user.id);
 
   if (error) throw error;

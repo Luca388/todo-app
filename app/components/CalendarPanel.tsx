@@ -37,12 +37,6 @@ type CalendarPanelProps = {
   onSelectTask: (id: string) => void;
 };
 
-const recurrenceLabels = {
-  daily: "매일",
-  weekly: "매주",
-  monthly: "매월",
-} as const;
-
 function startOfCalendarGrid(year: number, month: number) {
   const firstDay = new Date(year, month, 1);
   const start = new Date(year, month, 1 - firstDay.getDay());
@@ -352,8 +346,6 @@ export function CalendarPanel({
                           {lists.find((list) => list.id === task.listId)?.name ??
                             selectedList?.name ??
                             "todo 리스트"}
-                          {task.recurrence !== "none" &&
-                            ` · ${recurrenceLabels[task.recurrence]} 반복`}
                         </small>
                       </span>
                     </button>

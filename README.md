@@ -11,7 +11,6 @@
 - 드래그 또는 위·아래 버튼을 이용한 할 일 순서 변경
 - 오늘 날짜가 기본으로 지정되는 빠른 할 일 추가
 - 월간 일정에서 날짜별 할 일, 완료 작업, 집중 시간 확인
-- 매일·매주·매월 반복 일정
 - 집중·휴식 타이머, 반복 횟수, 건너뛰기, 자동 시작
 - 브라우저 알림과 완료 소리
 - 오늘과 최근 집중 기록
@@ -55,12 +54,6 @@ Secret key는 이 프로젝트의 프론트 환경변수에 넣지 마세요.
 새 프로젝트에서는 Supabase SQL Editor에서
 `supabase/migrations`의 SQL 파일을 파일명 순서대로 실행합니다. 기존
 프로젝트에서는 아직 실행하지 않은 최신 마이그레이션만 적용합니다.
-
-반복 일정에는 다음 파일까지 적용되어 있어야 합니다.
-
-```text
-supabase/migrations/202607280002_todo_recurrence.sql
-```
 
 Google 로그인은 Supabase Authentication에서 Provider와 Redirect URL을
 별도로 설정해야 합니다.

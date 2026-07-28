@@ -4,7 +4,6 @@ import test from "node:test";
 import {
   dueAtFromDateInput,
   getDueDateKey,
-  getNextRecurringDateKey,
   getTaskDateStatus,
 } from "../app/task-dates.ts";
 import { getErrorMessage } from "../app/error-message.ts";
@@ -57,18 +56,6 @@ test("stores and classifies task dates without timezone drift", () => {
   assert.equal(getTaskDateStatus(dueAt, "2026-07-27"), "today");
   assert.equal(getTaskDateStatus(dueAt, "2026-07-28"), "overdue");
   assert.equal(getTaskDateStatus(dueAt, "2026-07-26"), "upcoming");
-  assert.equal(
-    getNextRecurringDateKey("2026-07-27", "daily"),
-    "2026-07-28",
-  );
-  assert.equal(
-    getNextRecurringDateKey("2026-07-27", "weekly"),
-    "2026-08-03",
-  );
-  assert.equal(
-    getNextRecurringDateKey("2026-01-31", "monthly"),
-    "2026-02-28",
-  );
 });
 
 test("shows the real Supabase error instead of a generic auth message", () => {
@@ -121,7 +108,6 @@ test("wires todo lists and the calendar to Supabase with visible request states"
     lists,
     todos,
     migration,
-    recurrenceMigration,
   ] = await Promise.all([
       readFile(
         new URL("../app/components/TodoTimerApp.tsx", import.meta.url),
@@ -157,13 +143,6 @@ test("wires todo lists and the calendar to Supabase with visible request states"
         ),
         "utf8",
       ),
-      readFile(
-        new URL(
-          "../supabase/migrations/202607280002_todo_recurrence.sql",
-          import.meta.url,
-        ),
-        "utf8",
-      ),
   ]);
 
   assert.match(app, /listTodos\(\)/);
@@ -175,7 +154,8 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.match(app, /await setTodoCompleted\(/);
   assert.match(app, /await updateTodo\(/);
   assert.match(app, /dueAtFromDateInput/);
-  assert.match(app, /await deleteTodo\(/);
+  assert.match(app, /await deleteTodos\(uniqueIds\)/);
+  assert.doesNotMatch(app, /completeRecurringTodo|getNextRecurringDateKey/);
   assert.match(app, /nextTodos\.map\(\(todo\)/);
   assert.match(app, /await createTodos\(/);
   assert.match(app, /await importCompletedPomodoros\(/);
@@ -183,11 +163,11 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.match(taskList, /Supabase에서 할 일을 불러오고 있어요/);
   assert.match(taskList, /아직 할 일이 없어요/);
   assert.match(taskList, /다시 시도/);
-  assert.match(taskList, /setFilter\("active"\)/);
-  assert.match(taskList, /setFilter\("completed"\)/);
-  assert.doesNotMatch(taskList, /setFilter\("today"\)/);
-  assert.doesNotMatch(taskList, /setFilter\("upcoming"\)/);
-  assert.doesNotMatch(taskList, /setFilter\("overdue"\)/);
+  assert.match(taskList, /changeFilter\("active"\)/);
+  assert.match(taskList, /changeFilter\("completed"\)/);
+  assert.doesNotMatch(taskList, /changeFilter\("today"\)/);
+  assert.doesNotMatch(taskList, /changeFilter\("upcoming"\)/);
+  assert.doesNotMatch(taskList, /changeFilter\("overdue"\)/);
   assert.doesNotMatch(taskList, /type="date"/);
   assert.match(taskList, /Number\(left\.completed\) - Number\(right\.completed\)/);
   assert.match(taskList, /task\.completed \|\|/);
@@ -196,9 +176,14 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.match(taskList, /onReorderTask\(sourceId, task\.id\)/);
   assert.match(taskList, /위로 이동/);
   assert.match(taskList, /아래로 이동/);
+  assert.match(taskList, /selectedTaskIds/);
+  assert.match(taskList, /선택 삭제/);
+  assert.match(taskList, /onDeleteTasks\(selectedIds\)/);
+  assert.match(taskList, /삭제 선택/);
+  assert.doesNotMatch(taskList, /\bonDeleteTask(?:\s*:|\()/);
   assert.match(
     taskList,
-    /className="task-copy"[\s\S]*?onClick=\{\(\) => onSelectTask\(task\.id\)\}/,
+    /className="task-copy"[\s\S]*?isDeleteMode[\s\S]*?onSelectTask\(task\.id\)/,
   );
   assert.match(
     taskList,
@@ -222,9 +207,7 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.doesNotMatch(taskDetail, /type="date"/);
   assert.doesNotMatch(taskDetail, /예상 집중 횟수|estimate/);
   assert.match(taskDetail, /CalendarDatePicker/);
-  assert.match(taskDetail, /<option value="daily">매일<\/option>/);
-  assert.match(taskDetail, /<option value="weekly">매주<\/option>/);
-  assert.match(taskDetail, /<option value="monthly">매월<\/option>/);
+  assert.doesNotMatch(taskDetail, /recurrence/);
   assert.match(datePicker, /calendar-grid task-date-grid/);
   assert.match(datePicker, /날짜 없음/);
   assert.match(taskDetail, /리스트/);
@@ -232,27 +215,20 @@ test("wires todo lists and the calendar to Supabase with visible request states"
     app,
     /createTask\(\s*newTask,\s*getLocalDateKey\(\),\s*effectiveActiveListId/,
   );
+  assert.match(todos, /export async function deleteTodos/);
+  assert.match(todos, /\.in\("id", ids\)/);
   assert.match(app, /dueAt: updated\.due_at \?\? nextDueAt/);
   assert.match(app, /list_id: update\.listId/);
   assert.match(app, /await reorderTodos\(nextIds\)/);
-  assert.match(app, /await completeRecurringTodo\(id\)/);
-  assert.match(app, /getNextRecurringDateKey/);
   assert.match(lists, /DEFAULT_TODO_LIST_NAME = "todo 리스트"/);
   assert.match(lists, /isTodoListsSchemaMissing/);
   assert.match(todos, /id: input\.id \?\? window\.crypto\.randomUUID\(\)/);
   assert.match(todos, /export async function reorderTodos/);
-  assert.match(todos, /"complete_recurring_todo"/);
   assert.match(lists, /id: input\.id \?\? window\.crypto\.randomUUID\(\)/);
   assert.match(migration, /create table public\.todo_lists/);
   assert.match(migration, /add column list_id/);
   assert.match(migration, /add column completed_at/);
   assert.match(migration, /alter column list_id set not null/);
-  assert.match(recurrenceMigration, /add column recurrence text/);
-  assert.match(recurrenceMigration, /add column recurrence_spawned boolean/);
-  assert.match(
-    recurrenceMigration,
-    /create or replace function public\.complete_recurring_todo/,
-  );
 });
 
 test("keeps local secrets, logs, and deployment archives out of Git", async () => {

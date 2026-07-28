@@ -482,31 +482,6 @@ button {
   background: var(--forest);
 }
 
-.install-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 112px;
-  min-height: 74px;
-  border: 0;
-  border-radius: 18px;
-  background: var(--forest);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.install-button span {
-  color: var(--lime-strong);
-  font-size: 17px;
-}
-
-.install-button:hover {
-  background: var(--forest-2);
-}
-
 .install-preview {
   display: flex;
   align-items: center;
@@ -1911,16 +1886,11 @@ button {
 
   .intro-actions {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .daily-progress {
     width: auto;
-    min-height: 68px;
-  }
-
-  .install-button {
-    min-width: 84px;
     min-height: 68px;
   }
 

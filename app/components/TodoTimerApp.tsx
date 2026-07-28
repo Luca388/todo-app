@@ -133,11 +133,6 @@ type GuestTimerSession = {
   taskId: string | null;
 };
 
-type BeforeInstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
-
 function isTask(value: unknown): value is Task {
   if (!value || typeof value !== "object") return false;
   const task = value as Partial<Task>;
@@ -439,9 +434,6 @@ export function TodoTimerApp() {
     defaultTimerDurations.focus,
   );
   const [isRunning, setIsRunning] = useState(false);
-  const [installMessage, setInstallMessage] = useState<string | null>(null);
-  const [installPrompt, setInstallPrompt] =
-    useState<BeforeInstallPromptEvent | null>(null);
   const [migrationNotice, setMigrationNotice] = useState<string | null>(null);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(!supabaseConfigured);
@@ -923,33 +915,12 @@ export function TodoTimerApp() {
   ]);
 
   useEffect(() => {
-    function handleBeforeInstallPrompt(event: Event) {
-      event.preventDefault();
-      setInstallPrompt(event as BeforeInstallPromptEvent);
-    }
-
-    function handleAppInstalled() {
-      setInstallPrompt(null);
-      setInstallMessage("하루 앱이 설치되었습니다.");
-    }
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-    window.addEventListener("appinstalled", handleAppInstalled);
-
     if (
       process.env.NODE_ENV === "production" &&
       "serviceWorker" in navigator
     ) {
       void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
-
-    return () => {
-      window.removeEventListener(
-        "beforeinstallprompt",
-        handleBeforeInstallPrompt,
-      );
-      window.removeEventListener("appinstalled", handleAppInstalled);
-    };
   }, []);
 
   useEffect(
@@ -2271,38 +2242,6 @@ export function TodoTimerApp() {
     }
   }
 
-  async function handleInstallApp() {
-    const navigatorWithStandalone = window.navigator as Navigator & {
-      standalone?: boolean;
-    };
-    if (
-      window.matchMedia("(display-mode: standalone)").matches ||
-      navigatorWithStandalone.standalone
-    ) {
-      setInstallMessage("이미 앱으로 실행 중입니다.");
-      return;
-    }
-
-    if (installPrompt) {
-      await installPrompt.prompt();
-      const choice = await installPrompt.userChoice;
-      setInstallPrompt(null);
-      setInstallMessage(
-        choice.outcome === "accepted"
-          ? "설치를 시작했습니다."
-          : "설치를 취소했습니다.",
-      );
-      return;
-    }
-
-    const isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
-    setInstallMessage(
-      isIos
-        ? "Safari의 공유 버튼을 누른 뒤 ‘홈 화면에 추가’를 선택하세요."
-        : "브라우저 메뉴에서 ‘앱 설치’ 또는 ‘홈 화면에 추가’를 선택하세요.",
-    );
-  }
-
   async function handleAuthAction() {
     if (!supabaseConfigured || !authReady || authPending) return;
 
@@ -2378,26 +2317,8 @@ export function TodoTimerApp() {
                 <span style={{ width: `${progressPercent}%` }} />
               </div>
             </div>
-            <button
-              className="install-button"
-              type="button"
-              onClick={handleInstallApp}
-            >
-              <span aria-hidden="true">⇩</span>
-              앱 설치
-            </button>
           </div>
         </section>
-
-        {installMessage && (
-          <div className="install-preview" role="status">
-            <div>
-              <strong>홈 화면에 하루 추가</strong>
-              <span>{installMessage}</span>
-            </div>
-            <button type="button" onClick={() => setInstallMessage(null)} aria-label="닫기">×</button>
-          </div>
-        )}
 
         {migrationNotice && (
           <div className="install-preview" role="status">

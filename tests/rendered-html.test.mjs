@@ -241,6 +241,6 @@ test("ships an installable offline PWA shell", async () => {
   assert.match(serviceWorker, /request\.mode === "navigate"/);
   assert.match(serviceWorker, /notificationclick/);
   assert.match(layout, /manifest: "\/manifest\.webmanifest"/);
-  assert.match(app, /beforeinstallprompt/);
+  assert.doesNotMatch(app, /beforeinstallprompt|앱 설치/);
   assert.match(app, /serviceWorker\.register\("\/sw\.js"\)/);
 });

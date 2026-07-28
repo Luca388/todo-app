@@ -1,3 +1,4 @@
+-- 사용자별 습관과 날짜별 완료 체크를 저장합니다.
 begin;
 
 create table public.habits (

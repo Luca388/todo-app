@@ -154,7 +154,7 @@ test("wires todo lists and the calendar to Supabase with visible request states"
       readFile(new URL("../lib/supabase/habits.ts", import.meta.url), "utf8"),
       readFile(
         new URL(
-          "../supabase/migrations/202607280002_habit_tracker.sql",
+          "../supabase/migrations/202607280003_habit_tracker.sql",
           import.meta.url,
         ),
         "utf8",

@@ -171,9 +171,9 @@ export function TaskList({
                 <button
                   className="task-copy"
                   type="button"
-                  onClick={() => onOpenTask(task.id)}
-                  disabled={isPending}
-                  aria-label={`${task.title} 상세 열기`}
+                  onClick={() => onSelectTask(task.id)}
+                  disabled={task.completed || isPending || focusLocked}
+                  aria-label={`${task.title} 집중 대상으로 선택`}
                 >
                   <strong>{task.title}</strong>
                 </button>
@@ -183,6 +183,7 @@ export function TaskList({
                     type="button"
                     onClick={() => onOpenTask(task.id)}
                     disabled={isPending}
+                    aria-label={`${task.title} 상세 열기`}
                   >
                     상세
                   </button>

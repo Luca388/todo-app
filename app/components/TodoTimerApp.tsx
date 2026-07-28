@@ -43,6 +43,7 @@ import { defaultTimerDurations, initialTasks } from "../data";
 import { getErrorMessage } from "../error-message";
 import {
   dueAtFromDateInput,
+  getLocalDateKey,
 } from "../task-dates";
 import type {
   FocusHistoryEntry,
@@ -149,8 +150,6 @@ function isTask(value: unknown): value is Task {
     (task.label === "업무" ||
       task.label === "개인" ||
       task.label === "건강") &&
-    typeof task.estimate === "number" &&
-    Number.isFinite(task.estimate) &&
     typeof task.completed === "boolean" &&
     typeof task.pomodoros === "number" &&
     Number.isFinite(task.pomodoros)
@@ -351,7 +350,6 @@ function todoRowToTask(todo: TodoRow): Task {
     dueAt: todo.due_at,
     listId: todo.list_id ?? REMOTE_FALLBACK_LIST_ID,
     label: taskLabels[todo.label],
-    estimate: todo.estimated_pomodoros,
     completed: todo.completed,
     pomodoros: 0,
   };
@@ -1117,7 +1115,6 @@ export function TodoTimerApp() {
               todo.label,
               todo.completed,
               todo.due_at,
-              todo.estimated_pomodoros,
               schemaAvailable
                 ? (todo.list_id ?? nextLists[0].id)
                 : REMOTE_FALLBACK_LIST_ID,
@@ -1137,7 +1134,6 @@ export function TodoTimerApp() {
               label,
               task.completed,
               task.dueAt,
-              task.estimate,
               listId,
             ].join("\u0000");
             const matchingIds = availableTodos.get(key);
@@ -1164,7 +1160,6 @@ export function TodoTimerApp() {
                   : {}),
                 dueAt: task.dueAt,
                 position: todos.length + index,
-                estimatedPomodoros: task.estimate,
               },
             ];
           });
@@ -1677,7 +1672,6 @@ export function TodoTimerApp() {
           dueAt,
           listId,
           label: "개인",
-          estimate: 1,
           completed: false,
           pomodoros: 0,
       };
@@ -1718,7 +1712,11 @@ export function TodoTimerApp() {
 
   async function handleAddTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const saved = await createTask(newTask, "", effectiveActiveListId);
+    const saved = await createTask(
+      newTask,
+      getLocalDateKey(),
+      effectiveActiveListId,
+    );
     if (saved) setNewTask("");
   }
 
@@ -1735,7 +1733,6 @@ export function TodoTimerApp() {
     update: TaskDetailsUpdate,
   ) {
     const nextTitle = update.title.trim();
-    const nextEstimate = Math.min(Math.max(Math.floor(update.estimate), 1), 24);
     const nextDueAt = dueAtFromDateInput(update.dueDate);
     const task = allTasks.find((candidate) => candidate.id === id);
     const listExists = lists.some((list) => list.id === update.listId);
@@ -1767,7 +1764,6 @@ export function TodoTimerApp() {
             ? {
                 ...candidate,
                 dueAt: nextDueAt,
-                estimate: nextEstimate,
                 listId: update.listId,
                 title: nextTitle,
               }
@@ -1786,7 +1782,6 @@ export function TodoTimerApp() {
     try {
       const updated = await updateTodo(id, {
         due_at: nextDueAt,
-        estimated_pomodoros: nextEstimate,
         ...(listSchemaAvailable ? { list_id: update.listId } : {}),
         title: nextTitle,
       });
@@ -1796,7 +1791,6 @@ export function TodoTimerApp() {
             ? {
                 ...candidate,
                 dueAt: updated.due_at ?? nextDueAt,
-                estimate: updated.estimated_pomodoros,
                 listId: listSchemaAvailable
                   ? (updated.list_id ?? update.listId)
                   : candidate.listId,
@@ -2289,6 +2283,14 @@ export function TodoTimerApp() {
     }
   }
 
+  function handleCalendarSelectTask(id: string) {
+    if (hasActiveTimerSession && id !== activeTaskId) return;
+    const task = allTasks.find((candidate) => candidate.id === id);
+    if (task) setActiveListId(task.listId);
+    handleSelectTask(id);
+    setIsCalendarOpen(false);
+  }
+
   async function handleAuthAction() {
     if (!supabaseConfigured || !authReady || authPending) return;
 
@@ -2449,8 +2451,10 @@ export function TodoTimerApp() {
       </div>
 
       <CalendarPanel
+        activeTaskId={activeTaskId}
         activeListId={effectiveActiveListId}
         error={todosError}
+        focusLocked={hasActiveTimerSession}
         focusHistory={focusHistory}
         isOpen={isCalendarOpen}
         isSaving={todoSaving}
@@ -2459,6 +2463,7 @@ export function TodoTimerApp() {
         onAddTask={handleCalendarAddTask}
         onClose={() => setIsCalendarOpen(false)}
         onOpenTask={setDetailTaskId}
+        onSelectTask={handleCalendarSelectTask}
       />
 
       {detailTask && (

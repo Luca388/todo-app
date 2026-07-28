@@ -18,8 +18,10 @@ import type {
 } from "../types";
 
 type CalendarPanelProps = {
+  activeTaskId: string | null;
   activeListId: string;
   error: string | null;
+  focusLocked: boolean;
   focusHistory: FocusHistoryEntry[];
   isOpen: boolean;
   isSaving: boolean;
@@ -32,6 +34,7 @@ type CalendarPanelProps = {
   ) => Promise<boolean>;
   onClose: () => void;
   onOpenTask: (id: string) => void;
+  onSelectTask: (id: string) => void;
 };
 
 function startOfCalendarGrid(year: number, month: number) {
@@ -51,8 +54,10 @@ function formatFocusDuration(seconds: number) {
 }
 
 export function CalendarPanel({
+  activeTaskId,
   activeListId,
   error,
+  focusLocked,
   focusHistory,
   isOpen,
   isSaving,
@@ -61,6 +66,7 @@ export function CalendarPanel({
   onAddTask,
   onClose,
   onOpenTask,
+  onSelectTask,
 }: CalendarPanelProps) {
   const todayKey = getLocalDateKey();
   const [selectedDate, setSelectedDate] = useState(todayKey);
@@ -318,22 +324,40 @@ export function CalendarPanel({
                 <p>등록된 할 일이 없습니다.</p>
               ) : (
                 selectedTasks.map((task) => (
-                  <button
-                    className={task.completed ? "is-complete" : ""}
+                  <div
+                    className={`calendar-task-row ${task.completed ? "is-complete" : ""}`}
                     key={task.id}
-                    type="button"
-                    onClick={() => onOpenTask(task.id)}
                   >
-                    <span aria-hidden="true">{task.completed ? "✓" : "○"}</span>
-                    <span>
-                      <strong>{task.title}</strong>
-                      <small>
-                        {lists.find((list) => list.id === task.listId)?.name ??
-                          selectedList?.name ??
-                          "todo 리스트"}
-                      </small>
-                    </span>
-                  </button>
+                    <button
+                      className="calendar-task-select"
+                      type="button"
+                      onClick={() => onSelectTask(task.id)}
+                      disabled={
+                        task.completed ||
+                        (focusLocked && task.id !== activeTaskId)
+                      }
+                    >
+                      <span aria-hidden="true">
+                        {task.completed ? "✓" : "○"}
+                      </span>
+                      <span>
+                        <strong>{task.title}</strong>
+                        <small>
+                          {lists.find((list) => list.id === task.listId)?.name ??
+                            selectedList?.name ??
+                            "todo 리스트"}
+                        </small>
+                      </span>
+                    </button>
+                    <button
+                      className="calendar-task-detail"
+                      type="button"
+                      onClick={() => onOpenTask(task.id)}
+                      aria-label={`${task.title} 상세 열기`}
+                    >
+                      상세
+                    </button>
+                  </div>
                 ))
               )}
             </div>

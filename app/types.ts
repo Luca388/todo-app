@@ -7,7 +7,6 @@ export type Task = {
   dueAt: string | null;
   listId: string;
   label: TaskLabel;
-  estimate: number;
   completed: boolean;
   pomodoros: number;
 };

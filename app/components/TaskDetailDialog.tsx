@@ -3,10 +3,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { getDueDateKey } from "../task-dates";
 import type { Task, TodoList } from "../types";
+import { CalendarDatePicker } from "./CalendarDatePicker";
 
 export type TaskDetailsUpdate = {
   dueDate: string;
-  estimate: number;
   listId: string;
   title: string;
 };
@@ -33,7 +33,6 @@ export function TaskDetailDialog({
   const [title, setTitle] = useState(task.title);
   const [dueDate, setDueDate] = useState(getDueDateKey(task.dueAt) ?? "");
   const [listId, setListId] = useState(task.listId);
-  const [estimate, setEstimate] = useState(task.estimate);
   const [message, setMessage] = useState<string | null>(null);
 
   const effectiveListId = lists.some((list) => list.id === listId)
@@ -53,7 +52,6 @@ export function TaskDetailDialog({
     setMessage(null);
     const saved = await onSave(task.id, {
       dueDate,
-      estimate,
       listId: effectiveListId,
       title,
     });
@@ -113,50 +111,26 @@ export function TaskDetailDialog({
             />
           </label>
 
-          <div className="task-detail-fields">
-            <label>
-              <span>날짜</span>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(event) => setDueDate(event.target.value)}
-                disabled={isPending}
-              />
-            </label>
-            <label>
-              <span>리스트</span>
-              <select
-                value={effectiveListId}
-                onChange={(event) => setListId(event.target.value)}
-                disabled={isPending || !canChangeList}
-              >
-                {lists.map((list) => (
-                  <option value={list.id} key={list.id}>
-                    {list.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
           <label>
-            <span>예상 집중 횟수</span>
-            <input
-              type="number"
-              min="1"
-              max="24"
-              value={estimate}
-              onChange={(event) =>
-                setEstimate(
-                  Math.min(
-                    Math.max(Number.parseInt(event.target.value, 10) || 1, 1),
-                    24,
-                  ),
-                )
-              }
-              disabled={isPending}
-            />
+            <span>리스트</span>
+            <select
+              value={effectiveListId}
+              onChange={(event) => setListId(event.target.value)}
+              disabled={isPending || !canChangeList}
+            >
+              {lists.map((list) => (
+                <option value={list.id} key={list.id}>
+                  {list.name}
+                </option>
+              ))}
+            </select>
           </label>
+
+          <CalendarDatePicker
+            value={dueDate}
+            onChange={setDueDate}
+            disabled={isPending}
+          />
 
           {!canChangeList && lists.length > 1 && (
             <p className="task-detail-note">

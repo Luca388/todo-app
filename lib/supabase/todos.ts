@@ -18,7 +18,6 @@ export type CreateTodoInput = {
   dueAt?: string | null;
   listId?: string;
   position?: number;
-  estimatedPomodoros?: number;
 };
 
 export async function listTodos(): Promise<TodoRow[]> {
@@ -59,7 +58,6 @@ export async function createTodos(
       due_at: input.dueAt ?? null,
       ...(input.listId ? { list_id: input.listId } : {}),
       position: input.position ?? 0,
-      estimated_pomodoros: input.estimatedPomodoros ?? 1,
     };
   });
 

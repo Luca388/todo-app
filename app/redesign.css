@@ -1702,35 +1702,67 @@ button {
   text-align: center;
 }
 
-.calendar-day-tasks > button {
+.calendar-task-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.calendar-task-row:hover {
+  border-color: rgba(21, 63, 51, 0.14);
+  background: #fbfcf9;
+}
+
+.calendar-task-select {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr);
   align-items: start;
   gap: 7px;
-  width: 100%;
-  border: 1px solid transparent;
+  min-width: 0;
+  border: 0;
   padding: 10px;
-  border-radius: 11px;
-  background: #fff;
+  background: transparent;
   color: var(--text);
   cursor: pointer;
   text-align: left;
 }
 
-.calendar-day-tasks > button:hover {
-  border-color: rgba(21, 63, 51, 0.14);
-  background: #fbfcf9;
+.calendar-task-select:disabled {
+  cursor: default;
 }
 
-.calendar-day-tasks > button > span:first-child {
+.calendar-task-select > span:first-child {
   color: var(--forest);
   font-size: 11px;
 }
 
-.calendar-day-tasks > button > span:last-child {
+.calendar-task-select > span:last-child {
   display: grid;
   gap: 3px;
   min-width: 0;
+}
+
+.calendar-task-detail {
+  align-self: stretch;
+  border: 0;
+  border-left: 1px solid var(--border);
+  padding: 0 10px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.calendar-task-detail:hover {
+  background: #edf3ef;
+  color: var(--forest);
 }
 
 .calendar-day-tasks strong {
@@ -1766,7 +1798,8 @@ button {
 
 .task-detail-dialog {
   width: min(520px, 100%);
-  overflow: hidden;
+  max-height: min(880px, calc(100vh - 48px));
+  overflow: auto;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 24px;
   background: var(--card);
@@ -1842,10 +1875,103 @@ button {
   color: var(--text-soft);
 }
 
-.task-detail-fields {
+.task-date-picker {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 7px;
+}
+
+.task-date-label {
+  color: var(--text-soft);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.task-date-trigger {
+  display: flex;
+  min-height: 43px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(21, 63, 51, 0.15);
+  border-radius: 11px;
+  padding: 0 11px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.task-date-trigger > span {
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.task-date-trigger small {
+  color: var(--text-soft);
+  font-size: 9px;
+}
+
+.task-date-trigger:disabled {
+  cursor: wait;
+  background: #f1f0ea;
+  color: var(--text-soft);
+}
+
+.task-date-calendar {
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: #f7f6f1;
+}
+
+.task-date-calendar .calendar-month-nav {
+  margin-bottom: 9px;
+}
+
+.task-date-calendar .calendar-month-nav strong {
+  font-size: 13px;
+}
+
+.task-date-calendar .calendar-month-nav button {
+  width: 32px;
+  height: 32px;
+}
+
+.task-date-grid .calendar-day {
+  min-height: 44px;
+  align-content: center;
+  justify-items: center;
+  padding: 5px;
+  text-align: center;
+}
+
+.task-date-grid .calendar-day.is-today > span {
+  width: 24px;
+  height: 24px;
+}
+
+.task-date-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.task-date-actions button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 9px;
+  padding: 0 11px;
+  background: #ebece5;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.task-date-actions button:last-child {
+  background: var(--forest);
+  color: #fff;
 }
 
 .task-detail-note,
@@ -2110,10 +2236,6 @@ button {
 
   .task-detail-dialog > form {
     padding-bottom: max(22px, env(safe-area-inset-bottom));
-  }
-
-  .task-detail-fields {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .composer-plus {

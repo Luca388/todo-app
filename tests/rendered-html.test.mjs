@@ -101,6 +101,7 @@ test("wires todo lists and the calendar to Supabase with visible request states"
     app,
     taskList,
     taskDetail,
+    datePicker,
     taskDates,
     listRail,
     calendar,
@@ -118,6 +119,10 @@ test("wires todo lists and the calendar to Supabase with visible request states"
       ),
       readFile(
         new URL("../app/components/TaskDetailDialog.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../app/components/CalendarDatePicker.tsx", import.meta.url),
         "utf8",
       ),
       readFile(new URL("../app/task-dates.ts", import.meta.url), "utf8"),
@@ -166,6 +171,14 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.match(taskList, /Number\(left\.completed\) - Number\(right\.completed\)/);
   assert.match(taskList, /task\.completed \|\|/);
   assert.match(taskList, /상세 열기/);
+  assert.match(
+    taskList,
+    /className="task-copy"[\s\S]*?onClick=\{\(\) => onSelectTask\(task\.id\)\}/,
+  );
+  assert.match(
+    taskList,
+    /className="task-row-actions"[\s\S]*?onClick=\{\(\) => onOpenTask\(task\.id\)\}/,
+  );
   assert.match(taskList, /이 작업은 되돌릴 수 없습니다/);
   assert.doesNotMatch(taskList, /\{task\.label\}/);
   assert.doesNotMatch(taskList, /포모도로/);
@@ -178,11 +191,19 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.match(calendar, /완료한 작업/);
   assert.match(calendar, /이 날짜에 할 일 추가/);
   assert.match(calendar, /이날의 할 일에 추가했습니다/);
+  assert.match(calendar, /onSelectTask\(task\.id\)/);
   assert.match(calendar, /onOpenTask\(task\.id\)/);
   assert.match(taskDetail, /할 일 상세/);
-  assert.match(taskDetail, /type="date"/);
-  assert.match(taskDetail, /예상 집중 횟수/);
+  assert.doesNotMatch(taskDetail, /type="date"/);
+  assert.doesNotMatch(taskDetail, /예상 집중 횟수|estimate/);
+  assert.match(taskDetail, /CalendarDatePicker/);
+  assert.match(datePicker, /calendar-grid task-date-grid/);
+  assert.match(datePicker, /날짜 없음/);
   assert.match(taskDetail, /리스트/);
+  assert.match(
+    app,
+    /createTask\(\s*newTask,\s*getLocalDateKey\(\),\s*effectiveActiveListId/,
+  );
   assert.match(app, /dueAt: updated\.due_at \?\? nextDueAt/);
   assert.match(app, /list_id: update\.listId/);
   assert.match(lists, /DEFAULT_TODO_LIST_NAME = "todo 리스트"/);

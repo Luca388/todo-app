@@ -18,7 +18,7 @@ type TaskListProps = {
   onNewTaskChange: (value: string) => void;
   onAddTask: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
   onDeleteTask: (id: string) => Promise<boolean>;
-  onRenameTask: (id: string, title: string) => Promise<boolean>;
+  onOpenTask: (id: string) => void;
   onRetry: () => void;
   onToggleTask: (id: string) => void;
   onSelectTask: (id: string) => void;
@@ -37,13 +37,11 @@ export function TaskList({
   onNewTaskChange,
   onAddTask,
   onDeleteTask,
-  onRenameTask,
+  onOpenTask,
   onRetry,
   onToggleTask,
   onSelectTask,
 }: TaskListProps) {
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [editingTitle, setEditingTitle] = useState("");
   const [filter, setFilter] = useState<TaskFilter>("all");
   const remaining = tasks.filter((task) => !task.completed).length;
   const completed = tasks.length - remaining;
@@ -56,18 +54,6 @@ export function TaskList({
     return true;
   });
 
-  async function handleRenameSubmit(
-    event: FormEvent<HTMLFormElement>,
-    id: string,
-  ) {
-    event.preventDefault();
-    const saved = await onRenameTask(id, editingTitle);
-    if (saved) {
-      setEditingTaskId(null);
-      setEditingTitle("");
-    }
-  }
-
   async function handleDelete(task: Task) {
     const confirmed = window.confirm(
       `"${task.title}" 할 일을 삭제할까요? 이 작업은 되돌릴 수 없습니다.`,
@@ -75,10 +61,7 @@ export function TaskList({
     if (!confirmed) return;
 
     const deleted = await onDeleteTask(task.id);
-    if (deleted && editingTaskId === task.id) {
-      setEditingTaskId(null);
-      setEditingTitle("");
-    }
+    return deleted;
   }
 
   return (
@@ -168,10 +151,9 @@ export function TaskList({
         {visibleTasks.map((task) => {
           const isActive = activeTaskId === task.id;
           const isPending = pendingTaskIds.has(task.id);
-          const isEditing = editingTaskId === task.id;
           return (
             <article
-              className={`task-item ${task.completed ? "is-complete" : ""} ${isActive ? "is-active" : ""} ${isEditing ? "is-editing" : ""}`}
+              className={`task-item ${task.completed ? "is-complete" : ""} ${isActive ? "is-active" : ""}`}
               key={task.id}
             >
               <label className="task-check-wrap">
@@ -179,96 +161,56 @@ export function TaskList({
                   type="checkbox"
                   checked={task.completed}
                   onChange={() => onToggleTask(task.id)}
-                  disabled={
-                    isPending || isEditing || (focusLocked && isActive)
-                  }
+                  disabled={isPending || (focusLocked && isActive)}
                 />
                 <span className="custom-check" aria-hidden="true">✓</span>
                 <span className="sr-only">{task.title} 완료</span>
               </label>
 
-              {isEditing ? (
-                <form
-                  className="task-edit-form"
-                  onSubmit={(event) => handleRenameSubmit(event, task.id)}
+              <>
+                <button
+                  className="task-copy"
+                  type="button"
+                  onClick={() => onOpenTask(task.id)}
+                  disabled={isPending}
+                  aria-label={`${task.title} 상세 열기`}
                 >
-                  <label className="sr-only" htmlFor={`edit-task-${task.id}`}>
-                    할 일 제목 수정
-                  </label>
-                  <input
-                    id={`edit-task-${task.id}`}
-                    value={editingTitle}
-                    onChange={(event) => setEditingTitle(event.target.value)}
-                    maxLength={300}
-                    autoFocus
-                    disabled={isPending}
-                  />
-                  <button type="submit" disabled={isPending || !editingTitle.trim()}>
-                    저장
-                  </button>
+                  <strong>{task.title}</strong>
+                </button>
+
+                <div className="task-row-actions">
                   <button
                     type="button"
-                    onClick={() => {
-                      setEditingTaskId(null);
-                      setEditingTitle("");
-                    }}
+                    onClick={() => onOpenTask(task.id)}
                     disabled={isPending}
                   >
-                    취소
+                    상세
                   </button>
-                </form>
-              ) : (
-                <>
                   <button
-                    className="task-copy"
+                    className="is-danger"
                     type="button"
-                    onClick={() => onSelectTask(task.id)}
-                    disabled={
-                      task.completed ||
-                      isPending ||
-                      (focusLocked && !isActive)
-                    }
+                    onClick={() => handleDelete(task)}
+                    disabled={isPending || (focusLocked && isActive)}
                   >
-                    <strong>{task.title}</strong>
+                    삭제
                   </button>
+                </div>
 
-                  <div className="task-row-actions">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingTaskId(task.id);
-                        setEditingTitle(task.title);
-                      }}
-                      disabled={isPending}
-                    >
-                      수정
-                    </button>
-                    <button
-                      className="is-danger"
-                      type="button"
-                      onClick={() => handleDelete(task)}
-                      disabled={isPending || (focusLocked && isActive)}
-                    >
-                      삭제
-                    </button>
-                  </div>
-
-                  <button
-                    className={`focus-task-button ${isActive ? "is-selected" : ""}`}
-                    type="button"
-                    onClick={() => onSelectTask(task.id)}
-                    disabled={task.completed || isPending || focusLocked}
-                    aria-label={`${task.title} 집중 대상으로 선택`}
-                  >
-                    {isActive
-                      ? focusLocked
-                        ? "집중 중"
-                        : "선택됨"
-                      : "집중"}
-                    <span aria-hidden="true">{isActive ? "●" : "▶"}</span>
-                  </button>
-                </>
-              )}
+                <button
+                  className={`focus-task-button ${isActive ? "is-selected" : ""}`}
+                  type="button"
+                  onClick={() => onSelectTask(task.id)}
+                  disabled={task.completed || isPending || focusLocked}
+                  aria-label={`${task.title} 집중 대상으로 선택`}
+                >
+                  {isActive
+                    ? focusLocked
+                      ? "집중 중"
+                      : "선택됨"
+                    : "집중"}
+                  <span aria-hidden="true">{isActive ? "●" : "▶"}</span>
+                </button>
+              </>
             </article>
           );
         })}

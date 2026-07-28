@@ -54,6 +54,10 @@ import { CalendarPanel } from "./CalendarPanel";
 import { FocusTimer } from "./FocusTimer";
 import { ListRail } from "./ListRail";
 import { Sidebar } from "./Sidebar";
+import {
+  TaskDetailDialog,
+  type TaskDetailsUpdate,
+} from "./TaskDetailDialog";
 import { TaskList } from "./TaskList";
 
 function getAuthErrorMessage(error: unknown) {
@@ -408,6 +412,7 @@ export function TodoTimerApp() {
   const [remoteLists, setRemoteLists] = useState<RemoteListsState | null>(null);
   const [activeListId, setActiveListId] = useState(LOCAL_DEFAULT_LIST_ID);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [newTask, setNewTask] = useState("");
   const [mode, setMode] = useState<TimerMode>("focus");
@@ -485,6 +490,7 @@ export function TodoTimerApp() {
     ? (currentRemoteLists?.lists ?? [])
     : guestLists;
   const activeTask = allTasks.find((task) => task.id === activeTaskId);
+  const detailTask = allTasks.find((task) => task.id === detailTaskId);
   const currentPomodoro =
     authUserId && activePomodoro?.user_id === authUserId
       ? activePomodoro
@@ -1698,6 +1704,7 @@ export function TodoTimerApp() {
       });
       const createdTask = {
         ...todoRowToTask(created),
+        dueAt,
         listId,
       };
       updateVisibleTasks((current) => [...current, createdTask]);
@@ -1727,20 +1734,53 @@ export function TodoTimerApp() {
     return createTask(title, dueDate, listId);
   }
 
-  async function handleRenameTask(id: string, title: string) {
-    const nextTitle = title.trim();
-    const task = tasks.find((candidate) => candidate.id === id);
-    if (!nextTitle || !task || pendingTodoIds.has(id)) return false;
-    if (task.title === nextTitle) return true;
+  async function handleUpdateTaskDetails(
+    id: string,
+    update: TaskDetailsUpdate,
+  ) {
+    const nextTitle = update.title.trim();
+    const nextEstimate = Math.min(Math.max(Math.floor(update.estimate), 1), 24);
+    const nextDueAt = dueAtFromDateInput(update.dueDate);
+    const task = allTasks.find((candidate) => candidate.id === id);
+    const listExists = lists.some((list) => list.id === update.listId);
+    if (
+      !nextTitle ||
+      !task ||
+      !listExists ||
+      pendingTodoIds.has(id)
+    ) {
+      return false;
+    }
+    const listChanged = task.listId !== update.listId;
+    if (!listSchemaAvailable && listChanged) return false;
+    if (
+      listChanged &&
+      hasActiveTimerSession &&
+      activeTaskId === task.id
+    ) {
+      setTodoActionError(
+        "실행 중인 집중 대상은 다른 리스트로 이동할 수 없습니다.",
+      );
+      return false;
+    }
 
     if (!authUserId) {
       setGuestTasks((current) =>
         current.map((candidate) =>
           candidate.id === id
-            ? { ...candidate, title: nextTitle }
+            ? {
+                ...candidate,
+                dueAt: nextDueAt,
+                estimate: nextEstimate,
+                listId: update.listId,
+                title: nextTitle,
+              }
             : candidate,
         ),
       );
+      if (activeTaskId === id && listChanged) {
+        setActiveListId(update.listId);
+      }
       return true;
     }
 
@@ -1749,6 +1789,9 @@ export function TodoTimerApp() {
 
     try {
       const updated = await updateTodo(id, {
+        due_at: nextDueAt,
+        estimated_pomodoros: nextEstimate,
+        ...(listSchemaAvailable ? { list_id: update.listId } : {}),
         title: nextTitle,
       });
       updateVisibleTasks((current) =>
@@ -1756,11 +1799,19 @@ export function TodoTimerApp() {
           candidate.id === id
             ? {
                 ...candidate,
+                dueAt: updated.due_at ?? nextDueAt,
+                estimate: updated.estimated_pomodoros,
+                listId: listSchemaAvailable
+                  ? (updated.list_id ?? update.listId)
+                  : candidate.listId,
                 title: updated.title,
               }
             : candidate,
         ),
       );
+      if (activeTaskId === id && listChanged) {
+        setActiveListId(update.listId);
+      }
       return true;
     } catch (error) {
       setTodoActionError(getAuthErrorMessage(error));
@@ -1935,7 +1986,7 @@ export function TodoTimerApp() {
   }
 
   async function handleDeleteTask(id: string) {
-    const task = tasks.find((candidate) => candidate.id === id);
+    const task = allTasks.find((candidate) => candidate.id === id);
     if (!task || pendingTodoIds.has(id)) return false;
     if (
       hasActiveTimerSession &&
@@ -2354,7 +2405,7 @@ export function TodoTimerApp() {
             onNewTaskChange={setNewTask}
             onAddTask={handleAddTask}
             onDeleteTask={handleDeleteTask}
-            onRenameTask={handleRenameTask}
+            onOpenTask={setDetailTaskId}
             onRetry={handleRetryTodos}
             onToggleTask={handleToggleTask}
             onSelectTask={handleSelectTask}
@@ -2403,6 +2454,7 @@ export function TodoTimerApp() {
 
       <CalendarPanel
         activeListId={effectiveActiveListId}
+        error={todosError}
         focusHistory={focusHistory}
         isOpen={isCalendarOpen}
         isSaving={todoSaving}
@@ -2410,7 +2462,21 @@ export function TodoTimerApp() {
         tasks={allTasks}
         onAddTask={handleCalendarAddTask}
         onClose={() => setIsCalendarOpen(false)}
+        onOpenTask={setDetailTaskId}
       />
+
+      {detailTask && (
+        <TaskDetailDialog
+          key={detailTask.id}
+          canChangeList={listSchemaAvailable}
+          isPending={pendingTodoIds.has(detailTask.id)}
+          lists={lists}
+          task={detailTask}
+          onClose={() => setDetailTaskId(null)}
+          onDelete={handleDeleteTask}
+          onSave={handleUpdateTaskDetails}
+        />
+      )}
     </main>
   );
 }

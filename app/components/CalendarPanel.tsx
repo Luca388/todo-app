@@ -19,6 +19,7 @@ import type {
 
 type CalendarPanelProps = {
   activeListId: string;
+  error: string | null;
   focusHistory: FocusHistoryEntry[];
   isOpen: boolean;
   isSaving: boolean;
@@ -30,6 +31,7 @@ type CalendarPanelProps = {
     listId: string,
   ) => Promise<boolean>;
   onClose: () => void;
+  onOpenTask: (id: string) => void;
 };
 
 function startOfCalendarGrid(year: number, month: number) {
@@ -50,6 +52,7 @@ function formatFocusDuration(seconds: number) {
 
 export function CalendarPanel({
   activeListId,
+  error,
   focusHistory,
   isOpen,
   isSaving,
@@ -57,6 +60,7 @@ export function CalendarPanel({
   tasks,
   onAddTask,
   onClose,
+  onOpenTask,
 }: CalendarPanelProps) {
   const todayKey = getLocalDateKey();
   const [selectedDate, setSelectedDate] = useState(todayKey);
@@ -66,6 +70,7 @@ export function CalendarPanel({
   });
   const [draftTitle, setDraftTitle] = useState("");
   const [draftListId, setDraftListId] = useState(activeListId);
+  const [submitMessage, setSubmitMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -124,7 +129,9 @@ export function CalendarPanel({
     (list) => list.id === draftListId,
   )
     ? draftListId
-    : activeListId;
+    : lists.some((list) => list.id === activeListId)
+      ? activeListId
+      : (lists[0]?.id ?? "");
   const selectedList = lists.find(
     (list) => list.id === effectiveDraftListId,
   );
@@ -133,12 +140,18 @@ export function CalendarPanel({
     event.preventDefault();
     const title = draftTitle.trim();
     if (!title || !effectiveDraftListId || isSaving) return;
+    setSubmitMessage(null);
     const saved = await onAddTask(
       title,
       selectedDate,
       effectiveDraftListId,
     );
-    if (saved) setDraftTitle("");
+    if (saved) {
+      setDraftTitle("");
+      setSubmitMessage("이날의 할 일에 추가했습니다.");
+    } else {
+      setSubmitMessage("할 일을 추가하지 못했습니다.");
+    }
   }
 
   if (!isOpen) return null;
@@ -229,7 +242,10 @@ export function CalendarPanel({
                     ].join(" ")}
                     type="button"
                     key={key}
-                    onClick={() => setSelectedDate(key)}
+                    onClick={() => {
+                      setSelectedDate(key);
+                      setSubmitMessage(null);
+                    }}
                     aria-label={`${formatDateKey(key)}, 할 일 ${taskCount}개`}
                   >
                     <span>{date.getDate()}</span>
@@ -284,6 +300,14 @@ export function CalendarPanel({
                 {isSaving ? "추가 중…" : "추가"}
               </button>
             </form>
+            {(error || submitMessage) && (
+              <p
+                className={`calendar-action-message ${error ? "is-error" : ""}`}
+                role={error ? "alert" : "status"}
+              >
+                {error ?? submitMessage}
+              </p>
+            )}
 
             <div className="calendar-day-tasks">
               <div className="calendar-detail-heading">
@@ -294,9 +318,11 @@ export function CalendarPanel({
                 <p>등록된 할 일이 없습니다.</p>
               ) : (
                 selectedTasks.map((task) => (
-                  <div
+                  <button
                     className={task.completed ? "is-complete" : ""}
                     key={task.id}
+                    type="button"
+                    onClick={() => onOpenTask(task.id)}
                   >
                     <span aria-hidden="true">{task.completed ? "✓" : "○"}</span>
                     <span>
@@ -307,7 +333,7 @@ export function CalendarPanel({
                           "todo 리스트"}
                       </small>
                     </span>
-                  </div>
+                  </button>
                 ))
               )}
             </div>

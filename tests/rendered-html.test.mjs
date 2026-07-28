@@ -81,33 +81,45 @@ test("wires the Supabase auth lifecycle to desktop and mobile controls", async (
 });
 
 test("wires todo lists and the calendar to Supabase with visible request states", async () => {
-  const [app, taskList, taskDates, listRail, calendar, lists, migration] =
-    await Promise.all([
-    readFile(
-      new URL("../app/components/TodoTimerApp.tsx", import.meta.url),
-      "utf8",
-    ),
-    readFile(
-      new URL("../app/components/TaskList.tsx", import.meta.url),
-      "utf8",
-    ),
-    readFile(new URL("../app/task-dates.ts", import.meta.url), "utf8"),
-    readFile(
-      new URL("../app/components/ListRail.tsx", import.meta.url),
-      "utf8",
-    ),
-    readFile(
-      new URL("../app/components/CalendarPanel.tsx", import.meta.url),
-      "utf8",
-    ),
-    readFile(new URL("../lib/supabase/lists.ts", import.meta.url), "utf8"),
-    readFile(
-      new URL(
-        "../supabase/migrations/202607270002_todo_lists_and_completion_dates.sql",
-        import.meta.url,
+  const [
+    app,
+    taskList,
+    taskDetail,
+    taskDates,
+    listRail,
+    calendar,
+    lists,
+    migration,
+  ] = await Promise.all([
+      readFile(
+        new URL("../app/components/TodoTimerApp.tsx", import.meta.url),
+        "utf8",
       ),
-      "utf8",
-    ),
+      readFile(
+        new URL("../app/components/TaskList.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../app/components/TaskDetailDialog.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(new URL("../app/task-dates.ts", import.meta.url), "utf8"),
+      readFile(
+        new URL("../app/components/ListRail.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../app/components/CalendarPanel.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(new URL("../lib/supabase/lists.ts", import.meta.url), "utf8"),
+      readFile(
+        new URL(
+          "../supabase/migrations/202607270002_todo_lists_and_completion_dates.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
   ]);
 
   assert.match(app, /listTodos\(\)/);
@@ -135,7 +147,7 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.doesNotMatch(taskList, /type="date"/);
   assert.match(taskList, /Number\(left\.completed\) - Number\(right\.completed\)/);
   assert.match(taskList, /task\.completed \|\|/);
-  assert.match(taskList, /할 일 제목 수정/);
+  assert.match(taskList, /상세 열기/);
   assert.match(taskList, /이 작업은 되돌릴 수 없습니다/);
   assert.doesNotMatch(taskList, /\{task\.label\}/);
   assert.doesNotMatch(taskList, /포모도로/);
@@ -147,6 +159,14 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.match(calendar, /집중한 시간/);
   assert.match(calendar, /완료한 작업/);
   assert.match(calendar, /이 날짜에 할 일 추가/);
+  assert.match(calendar, /이날의 할 일에 추가했습니다/);
+  assert.match(calendar, /onOpenTask\(task\.id\)/);
+  assert.match(taskDetail, /할 일 상세/);
+  assert.match(taskDetail, /type="date"/);
+  assert.match(taskDetail, /예상 집중 횟수/);
+  assert.match(taskDetail, /리스트/);
+  assert.match(app, /dueAt: updated\.due_at \?\? nextDueAt/);
+  assert.match(app, /list_id: update\.listId/);
   assert.match(lists, /DEFAULT_TODO_LIST_NAME = "todo 리스트"/);
   assert.match(lists, /isTodoListsSchemaMissing/);
   assert.match(migration, /create table public\.todo_lists/);

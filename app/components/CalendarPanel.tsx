@@ -11,18 +11,11 @@ import {
   getDueDateKey,
   getLocalDateKey,
 } from "../task-dates";
-import type {
-  FocusHistoryEntry,
-  Task,
-  TodoList,
-} from "../types";
+import type { Task, TodoList } from "../types";
 
 type CalendarPanelProps = {
-  activeTaskId: string | null;
   activeListId: string;
   error: string | null;
-  focusLocked: boolean;
-  focusHistory: FocusHistoryEntry[];
   isOpen: boolean;
   isSaving: boolean;
   lists: TodoList[];
@@ -44,21 +37,9 @@ function startOfCalendarGrid(year: number, month: number) {
   return start;
 }
 
-function formatFocusDuration(seconds: number) {
-  const totalMinutes = Math.floor(seconds / 60);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours === 0) return `${minutes}분`;
-  if (minutes === 0) return `${hours}시간`;
-  return `${hours}시간 ${minutes}분`;
-}
-
 export function CalendarPanel({
-  activeTaskId,
   activeListId,
   error,
-  focusLocked,
-  focusHistory,
   isOpen,
   isSaving,
   lists,
@@ -111,15 +92,6 @@ export function CalendarPanel({
     return counts;
   }, [tasks]);
 
-  const focusSecondsByDate = useMemo(() => {
-    const totals: Record<string, number> = {};
-    for (const session of focusHistory) {
-      const dateKey = getLocalDateKey(new Date(session.endedAt));
-      totals[dateKey] = (totals[dateKey] ?? 0) + session.elapsedSeconds;
-    }
-    return totals;
-  }, [focusHistory]);
-
   const selectedTasks = tasks
     .filter((task) => getDueDateKey(task.dueAt) === selectedDate)
     .sort(
@@ -128,7 +100,6 @@ export function CalendarPanel({
   const completedOnSelectedDate = selectedTasks.filter(
     (task) => task.completed,
   );
-  const selectedFocusSeconds = focusSecondsByDate[selectedDate] ?? 0;
   const effectiveDraftListId = lists.some(
     (list) => list.id === draftListId,
   )
@@ -175,10 +146,7 @@ export function CalendarPanel({
         aria-labelledby="calendar-title"
       >
         <header className="calendar-panel-header">
-          <div>
-            <p className="eyebrow">SCHEDULE</p>
-            <h2 id="calendar-title">일정</h2>
-          </div>
+          <h2 id="calendar-title">일정</h2>
           <button type="button" onClick={onClose} aria-label="캘린더 닫기">
             ×
           </button>
@@ -234,7 +202,6 @@ export function CalendarPanel({
                   date.getMonth() === visibleMonth.getMonth();
                 const isSelected = key === selectedDate;
                 const taskCount = taskCountByDate[key] ?? 0;
-                const hasFocus = (focusSecondsByDate[key] ?? 0) > 0;
 
                 return (
                   <button
@@ -255,7 +222,6 @@ export function CalendarPanel({
                     <span>{date.getDate()}</span>
                     <small>
                       {taskCount > 0 && <b>{taskCount}</b>}
-                      {hasFocus && <i aria-label="집중 기록 있음" />}
                     </small>
                   </button>
                 );
@@ -271,8 +237,10 @@ export function CalendarPanel({
 
             <div className="calendar-stats">
               <div>
-                <span>집중한 시간</span>
-                <strong>{formatFocusDuration(selectedFocusSeconds)}</strong>
+                <span>남은 작업</span>
+                <strong>
+                  {selectedTasks.length - completedOnSelectedDate.length}개
+                </strong>
               </div>
               <div>
                 <span>완료한 작업</span>
@@ -330,10 +298,7 @@ export function CalendarPanel({
                       className="calendar-task-select"
                       type="button"
                       onClick={() => onSelectTask(task.id)}
-                      disabled={
-                        task.completed ||
-                        (focusLocked && task.id !== activeTaskId)
-                      }
+                      disabled={task.completed}
                     >
                       <span aria-hidden="true">
                         {task.completed ? "✓" : "○"}

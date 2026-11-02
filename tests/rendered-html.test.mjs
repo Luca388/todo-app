@@ -36,13 +36,12 @@ test("server-renders the Haru app and authentication entry points", async () => 
 
   const html = await response.text();
   assert.match(html, /<html lang="ko">/);
-  assert.match(html, /<title>하루 \| 투두와 포모도로<\/title>/);
+  assert.match(html, /<title>하루 \| 투두<\/title>/);
   assert.match(html, /class="app-shell"/);
-  assert.match(html, /오늘 할 일/);
   assert.match(html, /게스트 모드/);
   assert.match(html, /로그인 확인 중…/);
-  assert.match(html, /할 일과 집중 타이머/);
-  assert.match(html, /집중 타이머/);
+  assert.match(html, /할 일 추가/);
+  assert.doesNotMatch(html, /집중 타이머|포모도로/);
   assert.match(html, /todo 리스트/);
   assert.match(html, /미완료/);
   assert.match(html, /일정/);
@@ -77,7 +76,7 @@ test("shows the real Supabase error instead of a generic auth message", () => {
 test("wires the Supabase auth lifecycle to desktop and mobile controls", async () => {
   const [app, sidebar] = await Promise.all([
     readFile(
-      new URL("../app/components/TodoTimerApp.tsx", import.meta.url),
+      new URL("../app/components/TodoApp.tsx", import.meta.url),
       "utf8",
     ),
     readFile(
@@ -91,7 +90,7 @@ test("wires the Supabase auth lifecycle to desktop and mobile controls", async (
   assert.match(app, /subscription\.unsubscribe\(\)/);
   assert.match(app, /await signInWithGoogle\(\)/);
   assert.match(app, /await signOut\(\)/);
-  assert.match(app, /className="dashboard-intro"/);
+  assert.doesNotMatch(app, /className="dashboard-intro"/);
   assert.match(sidebar, /className="app-header"/);
   assert.match(sidebar, /onClick=\{onAuthAction\}/);
   assert.match(sidebar, /disabled=\{authDisabled\}/);
@@ -114,7 +113,7 @@ test("wires todo lists and the calendar to Supabase with visible request states"
     habitMigration,
   ] = await Promise.all([
       readFile(
-        new URL("../app/components/TodoTimerApp.tsx", import.meta.url),
+        new URL("../app/components/TodoApp.tsx", import.meta.url),
         "utf8",
       ),
       readFile(
@@ -174,7 +173,7 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.doesNotMatch(app, /completeRecurringTodo|getNextRecurringDateKey/);
   assert.match(app, /nextTodos\.map\(\(todo\)/);
   assert.match(app, /await createTodos\(/);
-  assert.match(app, /await importCompletedPomodoros\(/);
+  assert.doesNotMatch(app, /Pomodoro|pomodoro/);
   assert.match(app, /haru:guest-data:v1/);
   assert.match(taskList, /Supabase에서 할 일을 불러오고 있어요/);
   assert.match(taskList, /아직 할 일이 없어요/);
@@ -186,7 +185,6 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.doesNotMatch(taskList, /changeFilter\("overdue"\)/);
   assert.doesNotMatch(taskList, /type="date"/);
   assert.match(taskList, /Number\(left\.completed\) - Number\(right\.completed\)/);
-  assert.match(taskList, /task\.completed \|\|/);
   assert.match(taskList, /상세 열기/);
   assert.match(taskList, /draggable=\{canReorder\}/);
   assert.match(taskList, /onReorderTask\(sourceId, task\.id\)/);
@@ -199,23 +197,19 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.doesNotMatch(taskList, /\bonDeleteTask(?:\s*:|\()/);
   assert.match(
     taskList,
-    /className="task-copy"[\s\S]*?isDeleteMode[\s\S]*?onSelectTask\(task\.id\)/,
+    /className="task-copy"[\s\S]*?isDeleteMode[\s\S]*?onOpenTask\(task\.id\)/,
   );
-  assert.match(
-    taskList,
-    /className="task-row-actions"[\s\S]*?onClick=\{\(\) => onOpenTask\(task\.id\)\}/,
-  );
+  assert.match(taskList, /getTaskDateStatus\(task\.dueAt\)/);
   assert.match(taskList, /이 작업은 되돌릴 수 없습니다/);
   assert.doesNotMatch(taskList, /\{task\.label\}/);
   assert.doesNotMatch(taskList, /포모도로/);
   assert.match(taskDates, /T12:00:00\.000Z/);
   assert.match(taskDates, /getTaskDateStatus/);
-  assert.match(listRail, /캘린더와 기록/);
-  assert.match(listRail, /매일의 작은 체크/);
+  assert.match(listRail, /onOpenCalendar/);
   assert.match(listRail, /onOpenHabitTracker/);
   assert.match(listRail, /새 리스트 추가/);
   assert.match(listRail, /이름 변경/);
-  assert.match(calendar, /집중한 시간/);
+  assert.doesNotMatch(calendar, /집중한 시간|focusHistory/);
   assert.match(calendar, /완료한 작업/);
   assert.match(
     calendar,
@@ -226,7 +220,7 @@ test("wires todo lists and the calendar to Supabase with visible request states"
   assert.match(calendar, /이날의 할 일에 추가했습니다/);
   assert.match(calendar, /onSelectTask\(task\.id\)/);
   assert.match(calendar, /onOpenTask\(task\.id\)/);
-  assert.match(habitTracker, /HABIT TRACKER/);
+  assert.match(habitTracker, /습관 트래커/);
   assert.match(habitTracker, /연속 \$\{streak\}일/);
   assert.match(habitTracker, /onToggleHabit/);
   assert.match(habitTracker, /습관 추가/);
@@ -281,88 +275,6 @@ test("keeps local secrets, logs, and deployment archives out of Git", async () =
   assert.match(gitignore, /^\*\.tgz$/m);
 });
 
-test("persists and restores the Pomodoro session lifecycle", async () => {
-  const [app, timer, pomodoro, migration, uuidDefaultMigration] =
-    await Promise.all([
-    readFile(
-      new URL("../app/components/TodoTimerApp.tsx", import.meta.url),
-      "utf8",
-    ),
-    readFile(
-      new URL("../app/components/FocusTimer.tsx", import.meta.url),
-      "utf8",
-    ),
-    readFile(
-      new URL("../lib/supabase/pomodoro.ts", import.meta.url),
-      "utf8",
-    ),
-    readFile(
-      new URL(
-        "../supabase/migrations/202607270001_pomodoro_pause_state.sql",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-    readFile(
-      new URL(
-        "../supabase/migrations/202607280001_restore_uuid_defaults.sql",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-  ]);
-
-  assert.match(app, /getActivePomodoro\(\)/);
-  assert.match(app, /listRecentPomodoros\(1000\)/);
-  assert.match(app, /await startPomodoro\(/);
-  assert.match(app, /await pausePomodoro\(/);
-  assert.match(app, /await resumePomodoro\(/);
-  assert.match(app, /completePomodoro\(/);
-  assert.match(app, /await cancelPomodoro\(/);
-  assert.match(app, /handleSkipTimer/);
-  assert.match(app, /startAutomaticSession/);
-  assert.match(app, /DEFAULT_REPEAT_COUNT = 1/);
-  assert.match(app, /currentRound < repeatCount/);
-  assert.match(app, /Notification\.requestPermission\(\)/);
-  assert.match(app, /playTimerSound/);
-  assert.match(app, /autoStartRest/);
-  assert.match(app, /autoStartFocus/);
-  assert.match(app, /if \(!shouldAutoStart\) return/);
-  assert.match(app, /browserNotificationsEnabled/);
-  assert.match(app, /new BroadcastChannel\("haru-pomodoro"\)/);
-  assert.match(pomodoro, /id: window\.crypto\.randomUUID\(\)/);
-  assert.match(pomodoro, /last_resumed_at/);
-  assert.match(migration, /status in \('running', 'paused'\)/);
-  assert.match(
-    uuidDefaultMigration,
-    /alter table public\.todos[\s\S]*alter column id set default gen_random_uuid\(\)/,
-  );
-  assert.match(
-    uuidDefaultMigration,
-    /alter table public\.todo_lists[\s\S]*alter column id set default gen_random_uuid\(\)/,
-  );
-  assert.match(
-    uuidDefaultMigration,
-    /alter table public\.pomodoro_sessions[\s\S]*alter column id set default gen_random_uuid\(\)/,
-  );
-  assert.match(timer, /일시정지됨/);
-  assert.match(timer, /실행 중인 세션 취소/);
-  assert.match(timer, /다시 시도/);
-  assert.match(timer, /timer-duration-editor/);
-  assert.match(timer, /onDurationChange/);
-  assert.match(timer, /onSkip/);
-  assert.match(timer, /건너뛰기/);
-  assert.match(timer, /집중 반복/);
-  assert.match(timer, /onRepeatCountChange/);
-  assert.match(timer, /브라우저/);
-  assert.match(timer, /다음 집중/);
-  assert.match(timer, /role="switch"/);
-  assert.match(timer, /rest: "휴식"/);
-  assert.doesNotMatch(timer, /짧은 휴식|긴 휴식/);
-  assert.match(timer, /todayCompletedSessions/);
-  assert.match(timer, /todayFocusSeconds/);
-});
-
 test("ships an installable offline PWA shell", async () => {
   const [manifestSource, serviceWorker, layout, app] = await Promise.all([
     readFile(
@@ -372,7 +284,7 @@ test("ships an installable offline PWA shell", async () => {
     readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(
-      new URL("../app/components/TodoTimerApp.tsx", import.meta.url),
+      new URL("../app/components/TodoApp.tsx", import.meta.url),
       "utf8",
     ),
   ]);
@@ -389,14 +301,12 @@ test("ships an installable offline PWA shell", async () => {
     manifest.icons.map((icon) => icon.src),
     ["icon-192.png", "icon-512.png"],
   );
-  assert.match(serviceWorker, /haru-shell-v4/);
+  assert.match(serviceWorker, /haru-shell-v5/);
   assert.match(serviceWorker, /const APP_ROOT = new URL\("\.\/"/);
   assert.match(serviceWorker, /request\.mode === "navigate"/);
-  assert.match(serviceWorker, /notificationclick/);
   assert.match(layout, /manifest: "\/manifest\.webmanifest"/);
   assert.doesNotMatch(app, /beforeinstallprompt|앱 설치/);
   assert.match(app, /\.register\(publicAssetPath\("sw\.js"\)\)/);
-  assert.match(app, /icon: publicAssetPath\("icon-192\.png"\)/);
 });
 
 test("builds and deploys a static GitHub Pages client", async () => {
@@ -430,7 +340,7 @@ test("builds and deploys a static GitHub Pages client", async () => {
   assert.match(pagesConfig, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
   assert.match(pagesConfig, /outDir: path\.resolve\(process\.cwd\(\), "dist-pages"\)/);
   assert.match(pagesHtml, /%BASE_URL%manifest\.webmanifest/);
-  assert.match(pagesEntry, /createRoot\(root\)\.render\(<TodoTimerApp \/>/);
+  assert.match(pagesEntry, /createRoot\(root\)\.render\(<TodoApp \/>/);
   assert.match(workflow, /actions\/configure-pages@v5/);
   assert.match(workflow, /actions\/upload-pages-artifact@v3/);
   assert.match(workflow, /actions\/deploy-pages@v4/);

@@ -147,10 +147,7 @@ export function HabitTrackerPanel({
         aria-labelledby="habit-title"
       >
         <header className="calendar-panel-header">
-          <div>
-            <p className="eyebrow">HABIT TRACKER</p>
-            <h2 id="habit-title">습관 트래커</h2>
-          </div>
+          <h2 id="habit-title">습관 트래커</h2>
           <button type="button" onClick={onClose} aria-label="습관 트래커 닫기">
             ×
           </button>

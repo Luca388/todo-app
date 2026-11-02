@@ -92,10 +92,7 @@ export function TaskDetailDialog({
         aria-labelledby="task-detail-title"
       >
         <header>
-          <div>
-            <p className="eyebrow">TASK DETAIL</p>
-            <h2 id="task-detail-title">할 일 상세</h2>
-          </div>
+          <h2 id="task-detail-title">할 일 상세</h2>
           <button type="button" onClick={onClose} aria-label="상세창 닫기">
             ×
           </button>

@@ -1,6 +1,11 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import {
+  formatDateKey,
+  getDueDateKey,
+  getTaskDateStatus,
+} from "../task-dates";
 import type { Task } from "../types";
 
 type TaskFilter = "all" | "active" | "completed";
@@ -8,9 +13,7 @@ type TaskFilter = "all" | "active" | "completed";
 type TaskListProps = {
   tasks: Task[];
   listName: string;
-  activeTaskId: string | null;
   error: string | null;
-  focusLocked: boolean;
   isLoading: boolean;
   isSaving: boolean;
   pendingTaskIds: ReadonlySet<string>;
@@ -22,15 +25,12 @@ type TaskListProps = {
   onReorderTask: (id: string, targetId: string) => Promise<boolean>;
   onRetry: () => void;
   onToggleTask: (id: string) => void;
-  onSelectTask: (id: string) => void;
 };
 
 export function TaskList({
   tasks,
   listName,
-  activeTaskId,
   error,
-  focusLocked,
   isLoading,
   isSaving,
   pendingTaskIds,
@@ -42,7 +42,6 @@ export function TaskList({
   onReorderTask,
   onRetry,
   onToggleTask,
-  onSelectTask,
 }: TaskListProps) {
   const [filter, setFilter] = useState<TaskFilter>("all");
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -104,25 +103,20 @@ export function TaskList({
   return (
     <section className="tasks-panel" aria-labelledby="today-title">
       <header className="content-heading">
-        <div>
-          <p className="eyebrow">TASKS</p>
-          <h2 id="today-title">{listName}</h2>
-          <p className="heading-note">
-            할 일을 선택하면 집중 타이머에 연결됩니다. 끌어서 순서를
-            바꿀 수도 있어요.
-          </p>
-        </div>
-        <span className="remaining-pill">{remaining}개 남음</span>
+        <h1 id="today-title">{listName}</h1>
+        <span className="remaining-count">
+          {completed}/{tasks.length} 완료
+        </span>
       </header>
 
       <form className="task-composer" onSubmit={onAddTask}>
-        <span className="composer-plus" aria-hidden="true">＋</span>
+        <span className="composer-plus" aria-hidden="true">+</span>
         <label className="sr-only" htmlFor="new-task">새 할 일</label>
         <input
           id="new-task"
           value={newTask}
           onChange={(event) => onNewTaskChange(event.target.value)}
-          placeholder="새로운 할 일을 적어보세요"
+          placeholder="할 일 추가"
           autoComplete="off"
           disabled={isLoading || isSaving}
         />
@@ -211,10 +205,8 @@ export function TaskList({
           )}
 
         {visibleTasks.map((task) => {
-          const isActive = activeTaskId === task.id;
           const isPending = pendingTaskIds.has(task.id);
           const isDeleteSelected = selectedTaskIds.has(task.id);
-          const deletionBlocked = isPending || (focusLocked && isActive);
           const reorderIndex = reorderableTasks.findIndex(
             (candidate) => candidate.id === task.id,
           );
@@ -226,9 +218,11 @@ export function TaskList({
             reorderIndex >= 0;
           const previousTask = reorderableTasks[reorderIndex - 1];
           const nextTask = reorderableTasks[reorderIndex + 1];
+          const dueDateKey = getDueDateKey(task.dueAt);
+          const dateStatus = getTaskDateStatus(task.dueAt);
           return (
             <article
-              className={`task-item ${task.completed ? "is-complete" : ""} ${isActive ? "is-active" : ""} ${draggedTaskId === task.id ? "is-dragging" : ""} ${isDeleteMode ? "is-delete-mode" : ""} ${isDeleteSelected ? "is-delete-selected" : ""}`}
+              className={`task-item ${task.completed ? "is-complete" : ""} ${draggedTaskId === task.id ? "is-dragging" : ""} ${isDeleteMode ? "is-delete-mode" : ""} ${isDeleteSelected ? "is-delete-selected" : ""}`}
               key={task.id}
               draggable={canReorder}
               onDragStart={(event) => {
@@ -259,7 +253,7 @@ export function TaskList({
                     type="checkbox"
                     checked={isDeleteSelected}
                     onChange={() => toggleDeleteSelection(task.id)}
-                    disabled={deletionBlocked}
+                    disabled={isPending}
                   />
                   <span className="custom-check" aria-hidden="true">✓</span>
                   <span className="sr-only">{task.title} 삭제 선택</span>
@@ -270,7 +264,7 @@ export function TaskList({
                     type="checkbox"
                     checked={task.completed}
                     onChange={() => onToggleTask(task.id)}
-                    disabled={deletionBlocked}
+                    disabled={isPending}
                   />
                   <span className="custom-check" aria-hidden="true">✓</span>
                   <span className="sr-only">{task.title} 완료</span>
@@ -284,20 +278,23 @@ export function TaskList({
                   onClick={() =>
                     isDeleteMode
                       ? toggleDeleteSelection(task.id)
-                      : onSelectTask(task.id)
+                      : onOpenTask(task.id)
                   }
-                  disabled={
-                    isDeleteMode
-                      ? deletionBlocked
-                      : task.completed || isPending || focusLocked
-                  }
+                  disabled={isPending}
                   aria-label={
                     isDeleteMode
                       ? `${task.title} 삭제 선택`
-                      : `${task.title} 집중 대상으로 선택`
+                      : `${task.title} 상세 열기`
                   }
                 >
                   <strong>{task.title}</strong>
+                  {dueDateKey && (
+                    <small className={`task-due is-${dateStatus}`}>
+                      {dateStatus === "today"
+                        ? "오늘"
+                        : formatDateKey(dueDateKey)}
+                    </small>
+                  )}
                 </button>
 
                 {!isDeleteMode && <div className="task-row-actions">
@@ -322,30 +319,8 @@ export function TaskList({
                   >
                     ↓
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => onOpenTask(task.id)}
-                    disabled={isPending}
-                    aria-label={`${task.title} 상세 열기`}
-                  >
-                    상세
-                  </button>
                 </div>}
 
-                {!isDeleteMode && <button
-                  className={`focus-task-button ${isActive ? "is-selected" : ""}`}
-                  type="button"
-                  onClick={() => onSelectTask(task.id)}
-                  disabled={task.completed || isPending || focusLocked}
-                  aria-label={`${task.title} 집중 대상으로 선택`}
-                >
-                  {isActive
-                    ? focusLocked
-                      ? "집중 중"
-                      : "선택됨"
-                    : "집중"}
-                  <span aria-hidden="true">{isActive ? "●" : "▶"}</span>
-                </button>}
               </>
             </article>
           );

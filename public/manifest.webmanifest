@@ -1,13 +1,13 @@
 {
-  "name": "하루 - 투두와 포모도로",
+  "name": "하루 - 투두",
   "short_name": "하루",
-  "description": "할 일을 정리하고 집중 타이머로 실행하는 하루 관리 앱",
+  "description": "할 일을 정리하는 하루 관리 앱",
   "lang": "ko",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f7f3e8",
-  "theme_color": "#173e31",
+  "background_color": "#f6f6f4",
+  "theme_color": "#f6f6f4",
   "icons": [
     {
       "src": "icon-192.png",

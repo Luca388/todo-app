@@ -15,7 +15,10 @@ const geistMono = Geist_Mono({
 });
 
 export const viewport: Viewport = {
-  themeColor: "#173e31",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f6f4" },
+    { media: "(prefers-color-scheme: dark)", color: "#161617" },
+  ],
 };
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -36,8 +39,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase: origin,
-    title: "하루 | 투두와 포모도로",
-    description: "할 일을 정리하고 포모도로로 집중하는 하루 관리 도구",
+    title: "하루 | 투두",
+    description: "할 일을 정리하는 하루 관리 도구",
     manifest: "/manifest.webmanifest",
     appleWebApp: {
       capable: true,
@@ -52,21 +55,21 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       type: "website",
       locale: "ko_KR",
-      title: "하루 | 투두와 포모도로",
-      description: "할 일을 정리하고 포모도로로 집중하는 하루 관리 도구",
+      title: "하루 | 투두",
+      description: "할 일을 정리하는 하루 관리 도구",
       images: [
         {
           url: socialImage,
           width: 1728,
           height: 909,
-          alt: "하루 투두와 포모도로 앱",
+          alt: "하루 투두 앱",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "하루 | 투두와 포모도로",
-      description: "할 일을 정리하고 포모도로로 집중하는 하루 관리 도구",
+      title: "하루 | 투두",
+      description: "할 일을 정리하는 하루 관리 도구",
       images: [socialImage],
     },
   };

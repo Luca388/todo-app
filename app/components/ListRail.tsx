@@ -73,30 +73,20 @@ export function ListRail({
 
   return (
     <aside className="workspace-rail" aria-label="할 일 리스트">
-      <div className="rail-tools">
-        <button
-          className="calendar-launch"
-          type="button"
-          onClick={onOpenCalendar}
-        >
+      <nav className="rail-tools" aria-label="보기">
+        <button className="rail-tool" type="button" onClick={onOpenCalendar}>
           <span aria-hidden="true">▦</span>
-          <span>
-            <strong>일정</strong>
-            <small>캘린더와 기록</small>
-          </span>
+          일정
         </button>
         <button
-          className="habit-launch"
+          className="rail-tool"
           type="button"
           onClick={onOpenHabitTracker}
         >
           <span aria-hidden="true">✓</span>
-          <span>
-            <strong>습관 트래커</strong>
-            <small>매일의 작은 체크</small>
-          </span>
+          습관 트래커
         </button>
-      </div>
+      </nav>
 
       <div className="rail-section-heading">
         <span>리스트</span>
@@ -160,7 +150,6 @@ export function ListRail({
                     onClick={() => onSelectList(list.id)}
                     disabled={disabled && !isActive}
                   >
-                    <span aria-hidden="true">•</span>
                     <strong>{list.name}</strong>
                     <small>{listTaskCounts[list.id] ?? 0}</small>
                   </button>

@@ -1,4 +1,4 @@
-const CACHE_NAME = "haru-shell-v4";
+const CACHE_NAME = "haru-shell-v5";
 const APP_ROOT = new URL("./", self.location.href).href;
 const appAsset = (fileName) => new URL(fileName, APP_ROOT).href;
 const APP_SHELL = [
@@ -68,21 +68,5 @@ self.addEventListener("fetch", (event) => {
           return response;
         }),
     ),
-  );
-});
-
-self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
-  event.waitUntil(
-    self.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clients) => {
-        const existingClient = clients.find((client) =>
-          client.url.startsWith(self.location.origin),
-        );
-        return existingClient
-          ? existingClient.focus()
-          : self.clients.openWindow(APP_ROOT);
-      }),
   );
 });

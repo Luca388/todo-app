@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { TodoTimerApp } from "../app/components/TodoTimerApp";
+import { TodoApp } from "../app/components/TodoApp";
 import "../app/globals.css";
 import "../app/redesign.css";
 
@@ -9,4 +9,4 @@ if (!root) {
   throw new Error("앱을 표시할 루트 요소를 찾지 못했습니다.");
 }
 
-createRoot(root).render(<TodoTimerApp />);
+createRoot(root).render(<TodoApp />);

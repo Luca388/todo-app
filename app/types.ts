@@ -8,7 +8,6 @@ export type Task = {
   listId: string;
   label: TaskLabel;
   completed: boolean;
-  pomodoros: number;
 };
 
 export type TodoList = {
@@ -27,11 +26,3 @@ export type HabitCompletion = {
   habitId: string;
   date: string;
 };
-
-export type FocusHistoryEntry = {
-  elapsedSeconds: number;
-  endedAt: string;
-  taskId: string | null;
-};
-
-export type TimerMode = "focus" | "rest";
